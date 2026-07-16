@@ -44,6 +44,7 @@ public class SecurityConfiguration {
 				.authorizeHttpRequests(authorize -> authorize
 						.requestMatchers("/api/auth/register", "/api/auth/login").permitAll()
 						.requestMatchers("/actuator/health", "/actuator/health/**").permitAll()
+						.requestMatchers("/v3/api-docs/**", "/swagger-ui.html", "/swagger-ui/**").permitAll()
 						.requestMatchers("/api/manager/**").hasRole(Role.MANAGER.name())
 						.requestMatchers("/api/buyer/**").hasRole(Role.BUYER.name())
 						.requestMatchers("/api/catalog/**")

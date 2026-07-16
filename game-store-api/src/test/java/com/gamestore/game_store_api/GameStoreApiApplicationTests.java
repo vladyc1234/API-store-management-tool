@@ -55,4 +55,21 @@ class GameStoreApiApplicationTests {
 		assertTrue(response.body().contains("\"status\":\"UP\""));
 		assertTrue(response.headers().firstValue("X-Correlation-ID").isPresent());
 	}
+
+	@Test
+	void openApiDescriptionIsPublicAndDocumentsBearerSecurity() throws Exception {
+		var request = HttpRequest.newBuilder()
+				.uri(URI.create("http://localhost:" + port + "/v3/api-docs"))
+				.GET()
+				.build();
+
+		var response = HttpClient.newHttpClient()
+				.send(request, HttpResponse.BodyHandlers.ofString());
+
+		assertEquals(200, response.statusCode());
+		assertTrue(response.body().contains("\"title\":\"Game Store Management API\""));
+		assertTrue(response.body().contains("\"bearerAuth\""));
+		assertTrue(response.body().contains("/api/buyer/purchases"));
+		assertTrue(response.body().contains("/api/manager/statistics/purchases"));
+	}
 }
