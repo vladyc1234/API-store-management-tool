@@ -8,6 +8,7 @@ import javax.crypto.spec.SecretKeySpec;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
@@ -23,7 +24,10 @@ import org.springframework.security.oauth2.server.resource.authentication.JwtAut
 import org.springframework.security.oauth2.server.resource.authentication.JwtGrantedAuthoritiesConverter;
 import org.springframework.security.web.SecurityFilterChain;
 
+import com.gamestore.game_store_api.user.Role;
+
 @Configuration(proxyBeanMethods = false)
+@EnableMethodSecurity
 public class SecurityConfiguration {
 
 	@Bean
@@ -31,15 +35,20 @@ public class SecurityConfiguration {
 			throws Exception {
 		return http
 				.csrf(AbstractHttpConfigurer::disable)
+				.requestCache(AbstractHttpConfigurer::disable)
+				.securityContext(securityContext -> securityContext.requireExplicitSave(true))
 				.sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
 				.authorizeHttpRequests(authorize -> authorize
 						.requestMatchers("/api/auth/register", "/api/auth/login").permitAll()
 						.requestMatchers("/actuator/health", "/actuator/health/**").permitAll()
+						.requestMatchers("/api/manager/**").hasRole(Role.MANAGER.name())
+						.requestMatchers("/api/buyer/**").hasRole(Role.BUYER.name())
 						.anyRequest().authenticated())
 				.oauth2ResourceServer(resourceServer -> resourceServer
 						.jwt(jwt -> jwt.jwtAuthenticationConverter(jwtAuthenticationConverter)))
 				.httpBasic(AbstractHttpConfigurer::disable)
 				.formLogin(AbstractHttpConfigurer::disable)
+				.logout(AbstractHttpConfigurer::disable)
 				.build();
 	}
 

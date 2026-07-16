@@ -9,12 +9,18 @@ import java.util.regex.Pattern;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.SpringBootTest.WebEnvironment;
 import org.springframework.boot.test.web.server.LocalServerPort;
+import org.springframework.context.annotation.Bean;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.context.annotation.Import;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RestController;
 
 import com.gamestore.game_store_api.bootstrap.ManagerBootstrapService;
 import com.gamestore.game_store_api.config.ManagerBootstrapProperties;
@@ -28,6 +34,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @ActiveProfiles("test")
 @SpringBootTest(webEnvironment = WebEnvironment.RANDOM_PORT)
+@Import(AuthenticationIntegrationTests.SecurityProbeConfiguration.class)
 class AuthenticationIntegrationTests {
 
 	private static final HttpClient HTTP_CLIENT = HttpClient.newHttpClient();
@@ -105,6 +112,28 @@ class AuthenticationIntegrationTests {
 				jwtDecoder.decode(accessToken(login.body())).getClaimAsStringList("roles").getFirst());
 	}
 
+	@Test
+	void enforcesStatelessBuyerManagerAndMethodRoleMappings() throws Exception {
+		var buyerEmail = "roles-" + UUID.randomUUID() + "@example.com";
+		var buyerPassword = "safe-password-123";
+		assertEquals(201, post("/api/auth/register", credentials(buyerEmail, buyerPassword)).statusCode());
+
+		var buyerToken = accessToken(post("/api/auth/login", credentials(buyerEmail, buyerPassword)).body());
+		var managerToken = accessToken(post("/api/auth/login",
+				credentials(managerProperties.managerEmail(), managerProperties.managerPassword())).body());
+
+		var anonymousResponse = get("/api/buyer/security-probe", null);
+		assertEquals(401, anonymousResponse.statusCode());
+		assertTrue(anonymousResponse.headers().firstValue("Set-Cookie").isEmpty());
+
+		assertEquals(200, get("/api/buyer/security-probe", buyerToken).statusCode());
+		assertEquals(403, get("/api/buyer/security-probe", managerToken).statusCode());
+		assertEquals(403, get("/api/manager/security-probe", buyerToken).statusCode());
+		assertEquals(200, get("/api/manager/security-probe", managerToken).statusCode());
+		assertEquals(403, get("/api/security/method-manager-probe", buyerToken).statusCode());
+		assertEquals(200, get("/api/security/method-manager-probe", managerToken).statusCode());
+	}
+
 	private HttpResponse<String> post(String path, String body) throws Exception {
 		var request = HttpRequest.newBuilder()
 				.uri(URI.create("http://localhost:" + port + path))
@@ -112,6 +141,16 @@ class AuthenticationIntegrationTests {
 				.POST(HttpRequest.BodyPublishers.ofString(body))
 				.build();
 		return HTTP_CLIENT.send(request, HttpResponse.BodyHandlers.ofString());
+	}
+
+	private HttpResponse<String> get(String path, String accessToken) throws Exception {
+		var request = HttpRequest.newBuilder()
+				.uri(URI.create("http://localhost:" + port + path))
+				.GET();
+		if (accessToken != null) {
+			request.header("Authorization", "Bearer " + accessToken);
+		}
+		return HTTP_CLIENT.send(request.build(), HttpResponse.BodyHandlers.ofString());
 	}
 
 	private static String credentials(String email, String password) {
@@ -122,5 +161,34 @@ class AuthenticationIntegrationTests {
 		var matcher = ACCESS_TOKEN_PATTERN.matcher(responseBody);
 		assertTrue(matcher.find(), "response did not contain an access token");
 		return matcher.group(1);
+	}
+
+	@TestConfiguration(proxyBeanMethods = false)
+	static class SecurityProbeConfiguration {
+
+		@Bean
+		SecurityProbeController securityProbeController() {
+			return new SecurityProbeController();
+		}
+	}
+
+	@RestController
+	static class SecurityProbeController {
+
+		@GetMapping("/api/buyer/security-probe")
+		String buyerProbe() {
+			return "buyer";
+		}
+
+		@GetMapping("/api/manager/security-probe")
+		String managerProbe() {
+			return "manager";
+		}
+
+		@PreAuthorize("hasRole('MANAGER')")
+		@GetMapping("/api/security/method-manager-probe")
+		String methodManagerProbe() {
+			return "manager";
+		}
 	}
 }
