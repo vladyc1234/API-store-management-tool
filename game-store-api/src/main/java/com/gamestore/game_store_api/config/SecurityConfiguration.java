@@ -43,6 +43,8 @@ public class SecurityConfiguration {
 						.requestMatchers("/actuator/health", "/actuator/health/**").permitAll()
 						.requestMatchers("/api/manager/**").hasRole(Role.MANAGER.name())
 						.requestMatchers("/api/buyer/**").hasRole(Role.BUYER.name())
+						.requestMatchers("/api/catalog/**")
+								.hasAnyRole(Role.BUYER.name(), Role.MANAGER.name())
 						.anyRequest().authenticated())
 				.oauth2ResourceServer(resourceServer -> resourceServer
 						.jwt(jwt -> jwt.jwtAuthenticationConverter(jwtAuthenticationConverter)))
