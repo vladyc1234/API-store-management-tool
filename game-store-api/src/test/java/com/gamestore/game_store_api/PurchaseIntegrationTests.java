@@ -166,3 +166,130 @@ class PurchaseIntegrationTests {
 		return Long.parseLong(matcher.group(1));
 	}
 }
+
+@org.junit.jupiter.api.extension.ExtendWith(org.mockito.junit.jupiter.MockitoExtension.class)
+class PurchaseServiceUnitTests {
+
+	@org.mockito.Mock
+	private com.gamestore.game_store_api.purchase.PurchaseRepository purchaseRepository;
+	@org.mockito.Mock
+	private com.gamestore.game_store_api.game.GameRepository gameRepository;
+	@org.mockito.Mock
+	private com.gamestore.game_store_api.user.UserAccountRepository userRepository;
+
+	@Test
+	void purchaseCalculatesTotalReducesStockAndStoresEurSnapshot() {
+		var service = new com.gamestore.game_store_api.purchase.PurchaseService(
+				purchaseRepository, gameRepository, userRepository);
+		var buyer = new com.gamestore.game_store_api.user.UserAccount(
+				"buyer@example.com", "hash", "Buyer", com.gamestore.game_store_api.user.Role.BUYER);
+		var game = new com.gamestore.game_store_api.game.Game(
+				"UNIT-1", "Unit Purchase", null, "Action", "PC", new java.math.BigDecimal("12.50"), 5);
+		org.mockito.Mockito.when(userRepository.findById(1L)).thenReturn(java.util.Optional.of(buyer));
+		org.mockito.Mockito.when(gameRepository.findByIdForUpdate(10L)).thenReturn(java.util.Optional.of(game));
+		org.mockito.Mockito.when(purchaseRepository.saveAndFlush(
+				org.mockito.ArgumentMatchers.any(com.gamestore.game_store_api.purchase.Purchase.class)))
+				.thenAnswer(invocation -> invocation.getArgument(0));
+
+		var response = service.purchase(1L, request(10L, 2));
+
+		org.assertj.core.api.Assertions.assertThat(response.totalAmount()).isEqualByComparingTo("25.00");
+		org.assertj.core.api.Assertions.assertThat(response.currency()).isEqualTo("EUR");
+		org.assertj.core.api.Assertions.assertThat(game.getStockQuantity()).isEqualTo(3);
+	}
+
+	@Test
+	void inactiveAndInsufficientGamesCreateNoPurchase() {
+		var service = new com.gamestore.game_store_api.purchase.PurchaseService(
+				purchaseRepository, gameRepository, userRepository);
+		var buyer = new com.gamestore.game_store_api.user.UserAccount(
+				"buyer@example.com", "hash", "Buyer", com.gamestore.game_store_api.user.Role.BUYER);
+		var inactive = new com.gamestore.game_store_api.game.Game(
+				"UNIT-OFF", "Inactive", null, new java.math.BigDecimal("5.00"), 2);
+		inactive.deactivate();
+		org.mockito.Mockito.when(userRepository.findById(1L)).thenReturn(java.util.Optional.of(buyer));
+		org.mockito.Mockito.when(gameRepository.findByIdForUpdate(10L)).thenReturn(java.util.Optional.of(inactive));
+
+		org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.purchase(1L, request(10L, 1)))
+				.isInstanceOf(com.gamestore.game_store_api.purchase.PurchaseConflictException.class);
+		org.mockito.Mockito.verify(purchaseRepository, org.mockito.Mockito.never())
+				.saveAndFlush(org.mockito.ArgumentMatchers.any());
+	}
+
+	private static com.gamestore.game_store_api.purchase.CreatePurchaseRequest request(long gameId, int quantity) {
+		return new com.gamestore.game_store_api.purchase.CreatePurchaseRequest(java.util.List.of(
+				new com.gamestore.game_store_api.purchase.PurchaseItemRequest(gameId, quantity)));
+	}
+}
+
+@org.springframework.test.context.ActiveProfiles("test")
+@org.springframework.boot.test.context.SpringBootTest
+class PurchaseConcurrencyIntegrationTests {
+
+	private static final String DATABASE_NAME = "purchase_concurrency_"
+			+ java.util.UUID.randomUUID().toString().replace("-", "");
+
+	@org.springframework.test.context.DynamicPropertySource
+	static void isolatedDatabase(org.springframework.test.context.DynamicPropertyRegistry registry) {
+		registry.add("spring.datasource.url", () -> "jdbc:h2:mem:" + DATABASE_NAME
+				+ ";MODE=MySQL;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE");
+	}
+
+	@org.springframework.beans.factory.annotation.Autowired
+	private com.gamestore.game_store_api.purchase.PurchaseService purchaseService;
+	@org.springframework.beans.factory.annotation.Autowired
+	private com.gamestore.game_store_api.purchase.PurchaseRepository purchaseRepository;
+	@org.springframework.beans.factory.annotation.Autowired
+	private com.gamestore.game_store_api.game.GameRepository gameRepository;
+	@org.springframework.beans.factory.annotation.Autowired
+	private com.gamestore.game_store_api.user.UserAccountRepository userRepository;
+
+	@Test
+	void simultaneousBuyersCannotOversellOneRemainingUnit() throws Exception {
+		var suffix = java.util.UUID.randomUUID().toString();
+		var firstBuyer = userRepository.saveAndFlush(new com.gamestore.game_store_api.user.UserAccount(
+				"first-" + suffix + "@example.com", "hash", "First", com.gamestore.game_store_api.user.Role.BUYER));
+		var secondBuyer = userRepository.saveAndFlush(new com.gamestore.game_store_api.user.UserAccount(
+				"second-" + suffix + "@example.com", "hash", "Second", com.gamestore.game_store_api.user.Role.BUYER));
+		var game = gameRepository.saveAndFlush(new com.gamestore.game_store_api.game.Game(
+				"RACE-" + suffix.substring(0, 8), "Concurrency Game", null,
+				"Strategy", "PC", new java.math.BigDecimal("9.99"), 1));
+		var purchasesBefore = purchaseRepository.count();
+		var ready = new java.util.concurrent.CountDownLatch(2);
+		var start = new java.util.concurrent.CountDownLatch(1);
+		var executor = java.util.concurrent.Executors.newFixedThreadPool(2);
+
+		try {
+			var first = executor.submit(() -> attemptPurchase(firstBuyer.getId(), game.getId(), ready, start));
+			var second = executor.submit(() -> attemptPurchase(secondBuyer.getId(), game.getId(), ready, start));
+			org.assertj.core.api.Assertions.assertThat(ready.await(5, java.util.concurrent.TimeUnit.SECONDS)).isTrue();
+			start.countDown();
+
+			var outcomes = java.util.List.of(
+					first.get(10, java.util.concurrent.TimeUnit.SECONDS),
+					second.get(10, java.util.concurrent.TimeUnit.SECONDS));
+			org.assertj.core.api.Assertions.assertThat(outcomes).containsExactlyInAnyOrder(true, false);
+		}
+		finally {
+			executor.shutdownNow();
+		}
+
+		org.assertj.core.api.Assertions.assertThat(gameRepository.findById(game.getId()).orElseThrow()
+				.getStockQuantity()).isZero();
+		org.assertj.core.api.Assertions.assertThat(purchaseRepository.count()).isEqualTo(purchasesBefore + 1);
+	}
+
+	private boolean attemptPurchase(long buyerId, long gameId, java.util.concurrent.CountDownLatch ready,
+			java.util.concurrent.CountDownLatch start) throws InterruptedException {
+		ready.countDown();
+		start.await();
+		try {
+			purchaseService.purchase(buyerId, new com.gamestore.game_store_api.purchase.CreatePurchaseRequest(
+					java.util.List.of(new com.gamestore.game_store_api.purchase.PurchaseItemRequest(gameId, 1))));
+			return true;
+		}
+		catch (com.gamestore.game_store_api.purchase.PurchaseConflictException exception) {
+			return false;
+		}
+	}
+}

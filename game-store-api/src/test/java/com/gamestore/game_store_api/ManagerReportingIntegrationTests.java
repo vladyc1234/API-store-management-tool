@@ -59,7 +59,7 @@ class ManagerReportingIntegrationTests {
 		createGame(managerToken, marker + "-LOW", "Inventory Low", "20.00", 3);
 		createGame(managerToken, marker + "-FULL", "Inventory Full", "5.00", 10);
 		var inactiveId = createGame(managerToken, marker + "-OFF", "Inventory Inactive", "7.00", 4);
-		assertEquals(200, request("DELETE", "/api/manager/games/" + inactiveId, managerToken, null).statusCode());
+		assertEquals(204, request("DELETE", "/api/manager/games/" + inactiveId, managerToken, null).statusCode());
 
 		var after = inventoryService.summary(5);
 		assertEquals(3, after.activeGameCount() - before.activeGameCount());
@@ -70,12 +70,13 @@ class ManagerReportingIntegrationTests {
 		assertEquals(0, new BigDecimal("110.00")
 				.compareTo(after.inventoryValue().subtract(before.inventoryValue())));
 
-		var inventory = request("GET", "/api/manager/inventory?query=" + marker + "&size=10",
+		var inventory = request("GET", "/api/v1/manager/inventory?query=" + marker + "&size=10&lowStockThreshold=5",
 				managerToken, null);
 		assertEquals(200, inventory.statusCode());
 		assertTrue(inventory.body().contains("\"totalElements\":4"));
 		assertTrue(inventory.body().contains(marker + "-OFF"));
 		assertTrue(inventory.body().contains("\"active\":false"));
+		assertTrue(inventory.body().contains("\"lowStock\":"));
 		assertEquals(200,
 				request("GET", "/api/manager/inventory/summary?lowStockThreshold=5", managerToken, null)
 						.statusCode());
@@ -98,9 +99,12 @@ class ManagerReportingIntegrationTests {
 		assertEquals(201, request("POST", "/api/buyer/purchases", secondBuyerToken,
 				singleItemPurchaseJson(firstGameId, 1)).statusCode());
 
-		var statistics = request("GET", "/api/manager/statistics/purchases?topLimit=5", managerToken, null);
+		var statistics = request("GET", "/api/v1/manager/statistics/purchases?topLimit=5&lowStockThreshold=5",
+				managerToken, null);
 		assertEquals(200, statistics.statusCode());
-		assertTrue(statistics.body().contains("\"completedPurchases\":2"));
+		assertTrue(statistics.body().contains("\"totalOrders\":2"));
+		assertTrue(statistics.body().contains("\"currency\":\"EUR\""));
+		assertTrue(statistics.body().contains("\"lowStockGameCount\":"));
 		assertTrue(statistics.body().contains("\"totalRevenue\":35.00"));
 		assertTrue(statistics.body().contains("\"unitsSold\":4"));
 		assertTrue(statistics.body().contains("\"uniqueBuyers\":2"));
@@ -108,11 +112,12 @@ class ManagerReportingIntegrationTests {
 		assertTrue(statistics.body().contains(firstTitle));
 		assertTrue(statistics.body().contains("\"unitsSold\":3"));
 		assertTrue(statistics.body().contains("\"revenue\":30.00"));
+		assertTrue(statistics.body().contains("\"orderCount\":2"));
 
 		var future = request("GET", "/api/manager/statistics/purchases?from=2099-01-01&topLimit=5",
 				managerToken, null);
 		assertEquals(200, future.statusCode());
-		assertTrue(future.body().contains("\"completedPurchases\":0"));
+		assertTrue(future.body().contains("\"totalOrders\":0"));
 		assertTrue(future.body().contains("\"topGames\":[]"));
 		assertEquals(400, request("GET",
 				"/api/manager/statistics/purchases?from=2026-02-01&to=2026-01-01",

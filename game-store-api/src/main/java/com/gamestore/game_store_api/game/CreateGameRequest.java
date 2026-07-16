@@ -13,6 +13,12 @@ public record CreateGameRequest(
 		@NotBlank @Size(max = 50) String sku,
 		@NotBlank @Size(max = 200) String title,
 		@Size(max = 5000) String description,
-		@NotNull @DecimalMin("0.00") @Digits(integer = 8, fraction = 2) BigDecimal price,
+		@Size(max = 100) String genre,
+		@Size(max = 100) String platform,
+		@NotNull @DecimalMin("0.01") @Digits(integer = 10, fraction = 2) BigDecimal price,
 		@NotNull @PositiveOrZero Integer stockQuantity) {
+
+	public CreateGameRequest(String sku, String title, String description, BigDecimal price, Integer stockQuantity) {
+		this(sku, title, description, "Uncategorized", "Unknown", price, stockQuantity);
+	}
 }

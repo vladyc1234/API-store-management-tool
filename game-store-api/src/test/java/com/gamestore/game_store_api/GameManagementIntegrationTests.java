@@ -40,36 +40,37 @@ class GameManagementIntegrationTests {
 		var managerToken = managerToken();
 		var sku = uniqueSku("LIFECYCLE");
 
-		var creation = request("POST", "/api/manager/games", managerToken,
+		var creation = request("POST", "/api/v1/manager/games", managerToken,
 				gameJson(sku, "Lifecycle Strategy Game", "A tactical game", "29.99", 5));
 		assertEquals(201, creation.statusCode());
 		var gameId = id(creation.body());
 
-		var search = request("GET", "/api/catalog/games?query=" + encode(sku), managerToken, null);
+		var search = request("GET", "/api/v1/games?query=" + encode(sku)
+				+ "&genre=Uncategorized&platform=Unknown&minimumPrice=20&maximumPrice=40&sort=price&direction=asc",
+				managerToken, null);
 		assertEquals(200, search.statusCode());
 		assertTrue(search.body().contains(sku));
 
-		var priceChange = request("PATCH", "/api/manager/games/" + gameId + "/price", managerToken,
+		var priceChange = request("PATCH", "/api/v1/manager/games/" + gameId + "/price", managerToken,
 				"{\"price\":39.99}");
 		assertEquals(200, priceChange.statusCode());
 		assertTrue(priceChange.body().contains("\"price\":39.99"));
 
-		var stockIncrease = request("PATCH", "/api/manager/games/" + gameId + "/stock", managerToken,
-				"{\"delta\":2}");
+		var stockIncrease = request("PATCH", "/api/v1/manager/games/" + gameId + "/stock", managerToken,
+				"{\"stockQuantity\":7}");
 		assertEquals(200, stockIncrease.statusCode());
 		assertTrue(stockIncrease.body().contains("\"stockQuantity\":7"));
 
-		var stockDecrease = request("PATCH", "/api/manager/games/" + gameId + "/stock", managerToken,
-				"{\"delta\":-3}");
+		var stockDecrease = request("PATCH", "/api/v1/manager/games/" + gameId + "/stock", managerToken,
+				"{\"stockQuantity\":4}");
 		assertEquals(200, stockDecrease.statusCode());
 		assertTrue(stockDecrease.body().contains("\"stockQuantity\":4"));
 
-		var deactivation = request("DELETE", "/api/manager/games/" + gameId, managerToken, null);
-		assertEquals(200, deactivation.statusCode());
-		assertTrue(deactivation.body().contains("\"active\":false"));
+		var deactivation = request("DELETE", "/api/v1/manager/games/" + gameId, managerToken, null);
+		assertEquals(204, deactivation.statusCode());
 		assertEquals(404,
-				request("GET", "/api/catalog/games/" + gameId, managerToken, null).statusCode());
-		assertEquals(409, request("PATCH", "/api/manager/games/" + gameId + "/price", managerToken,
+				request("GET", "/api/v1/games/" + gameId, managerToken, null).statusCode());
+		assertEquals(409, request("PATCH", "/api/v1/manager/games/" + gameId + "/price", managerToken,
 				"{\"price\":49.99}").statusCode());
 	}
 

@@ -38,11 +38,11 @@ public class ManagerBootstrapService {
 			return;
 		}
 
-		if (properties.managerPassword().length() < 8) {
-			log.warn("The configured manager password is shorter than eight characters; change it before deployment");
+		if (properties.managerPassword().length() < 12 || properties.managerPassword().length() > 72) {
+			throw new IllegalStateException("The configured manager password must contain 12 to 72 characters");
 		}
 		var manager = new UserAccount(properties.managerEmail(),
-				passwordEncoder.encode(properties.managerPassword()), Role.MANAGER);
+				passwordEncoder.encode(properties.managerPassword()), "Store Manager", Role.MANAGER);
 		var savedManager = userAccountRepository.saveAndFlush(manager);
 		log.info("Bootstrapped manager account with id {}", savedManager.getId());
 	}

@@ -1,6 +1,9 @@
 package com.gamestore.game_store_api.game;
 
+import java.net.URI;
+
 import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -25,7 +28,7 @@ import com.gamestore.game_store_api.config.OpenApiConfiguration;
 
 @Validated
 @RestController
-@RequestMapping("/api/manager/games")
+@RequestMapping({"/api/v1/manager/games", "/api/manager/games"})
 @PreAuthorize("hasRole('MANAGER')")
 @Tag(name = "Manager games")
 @SecurityRequirement(name = OpenApiConfiguration.BEARER_AUTH)
@@ -45,10 +48,10 @@ public class ManagerGameController {
 	}
 
 	@PostMapping
-	@ResponseStatus(HttpStatus.CREATED)
 	@Operation(summary = "Create a game", description = "Adds a new active game with a unique SKU, price, and initial stock.")
-	public GameResponse create(@Valid @RequestBody CreateGameRequest request) {
-		return gameService.create(request);
+	public ResponseEntity<GameResponse> create(@Valid @RequestBody CreateGameRequest request) {
+		var created = gameService.create(request);
+		return ResponseEntity.created(URI.create("/api/v1/games/" + created.id())).body(created);
 	}
 
 	@PatchMapping("/{id}/price")
@@ -59,8 +62,8 @@ public class ManagerGameController {
 	}
 
 	@PatchMapping("/{id}/stock")
-	@Operation(summary = "Adjust game stock",
-			description = "Adds or removes units using a non-zero delta. Stock can never become negative.")
+	@Operation(summary = "Set game stock",
+			description = "Replaces stock with an absolute nonnegative quantity.")
 	public GameResponse changeStock(@Parameter(description = "Game ID") @PathVariable @Positive long id,
 			@Valid @RequestBody ChangeStockRequest request) {
 		return gameService.changeStock(id, request);
@@ -69,7 +72,8 @@ public class ManagerGameController {
 	@DeleteMapping("/{id}")
 	@Operation(summary = "Deactivate a game",
 			description = "Makes a game unavailable in the catalog while preserving purchase history. The operation is idempotent.")
-	public GameResponse deactivate(@Parameter(description = "Game ID") @PathVariable @Positive long id) {
-		return gameService.deactivate(id);
+	@ResponseStatus(HttpStatus.NO_CONTENT)
+	public void deactivate(@Parameter(description = "Game ID") @PathVariable @Positive long id) {
+		gameService.deactivate(id);
 	}
 }

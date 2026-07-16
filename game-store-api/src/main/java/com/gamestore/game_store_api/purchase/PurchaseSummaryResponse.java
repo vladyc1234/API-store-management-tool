@@ -7,6 +7,7 @@ public record PurchaseSummaryResponse(
 		Long id,
 		PurchaseStatus status,
 		BigDecimal totalAmount,
+		String currency,
 		LocalDateTime createdAt) {
 
 	static PurchaseSummaryResponse from(Purchase purchase) {
@@ -14,6 +15,7 @@ public record PurchaseSummaryResponse(
 				purchase.getId(),
 				purchase.getStatus(),
 				purchase.getTotalAmount(),
+				purchase.getCurrency(),
 				purchase.getCreatedAt());
 	}
 }

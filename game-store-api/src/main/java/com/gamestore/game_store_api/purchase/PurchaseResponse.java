@@ -8,6 +8,7 @@ public record PurchaseResponse(
 		Long id,
 		PurchaseStatus status,
 		BigDecimal totalAmount,
+		String currency,
 		List<PurchaseItemResponse> items,
 		LocalDateTime createdAt) {
 
@@ -16,6 +17,7 @@ public record PurchaseResponse(
 				purchase.getId(),
 				purchase.getStatus(),
 				purchase.getTotalAmount(),
+				purchase.getCurrency(),
 				purchase.getItems().stream().map(PurchaseItemResponse::from).toList(),
 				purchase.getCreatedAt());
 	}

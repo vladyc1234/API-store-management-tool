@@ -45,49 +45,55 @@ class MySqlSmokeIT {
 		var apiDocs = request("GET", "/v3/api-docs", null, null);
 		assertEquals(200, apiDocs.statusCode());
 		assertTrue(apiDocs.body().contains("\"bearerAuth\""));
-		assertTrue(apiDocs.body().contains("/api/manager/games"));
+		assertTrue(apiDocs.body().contains("/api/v1/manager/games"));
 
 		var suffix = UUID.randomUUID().toString().substring(0, 8);
 		var buyerEmail = "mysql-smoke-" + suffix + "@example.com";
 		var buyerPassword = "smoke-buyer-password-123";
-		assertEquals(201, request("POST", "/api/auth/register", null,
-				credentials(buyerEmail, buyerPassword)).statusCode());
-		var buyerToken = token(request("POST", "/api/auth/login", null,
+		assertEquals(201, request("POST", "/api/v1/auth/register", null,
+				registration(buyerEmail, buyerPassword)).statusCode());
+		var buyerToken = token(request("POST", "/api/v1/auth/login", null,
 				credentials(buyerEmail, buyerPassword)));
-		var managerToken = token(request("POST", "/api/auth/login", null,
+		var managerToken = token(request("POST", "/api/v1/auth/login", null,
 				credentials(managerProperties.managerEmail(), managerProperties.managerPassword())));
 
 		var sku = "MYSQL-" + suffix.toUpperCase();
-		var gameCreation = request("POST", "/api/manager/games", managerToken,
+		var gameCreation = request("POST", "/api/v1/manager/games", managerToken,
 				"{\"sku\":\"" + sku + "\",\"title\":\"MySQL Smoke Game\",\"description\":\"CI smoke fixture\","
-						+ "\"price\":19.99,\"stockQuantity\":2}");
+						+ "\"genre\":\"Strategy\",\"platform\":\"PC\",\"price\":19.99,\"stockQuantity\":2}");
 		assertEquals(201, gameCreation.statusCode());
+		assertTrue(gameCreation.headers().firstValue("Location").orElseThrow().startsWith("/api/v1/games/"));
 		var gameId = id(gameCreation.body());
 
-		var catalog = request("GET", "/api/catalog/games?query=" + encode(sku), buyerToken, null);
+		var catalog = request("GET", "/api/v1/games?query=" + encode(sku)
+				+ "&genre=Strategy&platform=PC&minimumPrice=10&maximumPrice=30&sort=price&direction=asc",
+				buyerToken, null);
 		assertEquals(200, catalog.statusCode());
 		assertTrue(catalog.body().contains(sku));
 
-		var purchase = request("POST", "/api/buyer/purchases", buyerToken,
-				"{\"items\":[{\"gameId\":" + gameId + ",\"quantity\":1}]}");
+		var purchase = request("POST", "/api/v1/purchases", buyerToken,
+				"{\"gameId\":" + gameId + ",\"quantity\":1}");
 		assertEquals(201, purchase.statusCode());
 		assertTrue(purchase.body().contains("\"totalAmount\":19.99"));
+		assertTrue(purchase.body().contains("\"currency\":\"EUR\""));
 		var purchaseId = id(purchase.body());
 
-		var history = request("GET", "/api/buyer/purchases", buyerToken, null);
+		var history = request("GET", "/api/v1/purchases/me", buyerToken, null);
 		assertEquals(200, history.statusCode());
 		assertTrue(history.body().contains("\"id\":" + purchaseId));
 
-		var inventory = request("GET", "/api/manager/inventory?query=" + encode(sku), managerToken, null);
+		var inventory = request("GET", "/api/v1/manager/inventory?query=" + encode(sku), managerToken, null);
 		assertEquals(200, inventory.statusCode());
 		assertTrue(inventory.body().contains("\"stockQuantity\":1"));
+		assertTrue(inventory.body().contains("\"lowStock\":true"));
 
 		var today = LocalDate.now();
-		var statistics = request("GET", "/api/manager/statistics/purchases?from=" + today + "&to=" + today,
+		var statistics = request("GET", "/api/v1/manager/statistics/purchases?from=" + today + "&to=" + today,
 				managerToken, null);
 		assertEquals(200, statistics.statusCode());
-		assertTrue(statistics.body().contains("\"completedPurchases\":"));
+		assertTrue(statistics.body().contains("\"totalOrders\":"));
 		assertTrue(statistics.body().contains("\"totalRevenue\":"));
+		assertTrue(statistics.body().contains("\"currency\":\"EUR\""));
 	}
 
 	private HttpResponse<String> request(String method, String path, String token, String body) throws Exception {
@@ -122,6 +128,11 @@ class MySqlSmokeIT {
 
 	private static String credentials(String email, String password) {
 		return "{\"email\":\"" + email + "\",\"password\":\"" + password + "\"}";
+	}
+
+	private static String registration(String email, String password) {
+		return "{\"email\":\"" + email + "\",\"displayName\":\"MySQL Smoke Buyer\",\"password\":\""
+				+ password + "\"}";
 	}
 
 	private static String encode(String value) {

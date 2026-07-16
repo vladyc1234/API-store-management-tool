@@ -23,7 +23,7 @@ import com.gamestore.game_store_api.config.OpenApiConfiguration;
 
 @Validated
 @RestController
-@RequestMapping("/api/manager/statistics/purchases")
+@RequestMapping({"/api/v1/manager/statistics/purchases", "/api/manager/statistics/purchases"})
 @PreAuthorize("hasRole('MANAGER')")
 @Tag(name = "Manager statistics")
 @SecurityRequirement(name = OpenApiConfiguration.BEARER_AUTH)
@@ -49,7 +49,9 @@ public class ManagerPurchaseStatisticsController {
 			@Parameter(description = "Optional last purchase date, inclusive", example = "2026-12-31")
 			@RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
 			@Parameter(description = "Number of top-selling games from 1 to 50")
-			@RequestParam(defaultValue = "10") @Min(1) @Max(50) int topLimit) {
-		return purchaseStatisticsService.statistics(from, to, topLimit);
+			@RequestParam(defaultValue = "5") @Min(1) @Max(50) int topLimit,
+			@Parameter(description = "Inclusive quantity considered low stock")
+			@RequestParam(defaultValue = "5") @Min(0) @Max(1_000_000) int lowStockThreshold) {
+		return purchaseStatisticsService.statistics(from, to, topLimit, lowStockThreshold);
 	}
 }

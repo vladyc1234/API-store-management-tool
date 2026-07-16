@@ -11,9 +11,9 @@ public record InventoryPage(
 		long totalElements,
 		int totalPages) {
 
-	static InventoryPage from(Page<Game> games) {
+	static InventoryPage from(Page<Game> games, int lowStockThreshold) {
 		return new InventoryPage(
-				games.stream().map(InventoryGameResponse::from).toList(),
+				games.stream().map(game -> InventoryGameResponse.from(game, lowStockThreshold)).toList(),
 				games.getNumber(),
 				games.getSize(),
 				games.getTotalElements(),

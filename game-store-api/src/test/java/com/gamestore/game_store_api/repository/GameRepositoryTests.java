@@ -16,6 +16,7 @@ import org.springframework.test.context.ActiveProfiles;
 
 import com.gamestore.game_store_api.game.Game;
 import com.gamestore.game_store_api.game.GameRepository;
+import com.gamestore.game_store_api.game.GameSpecifications;
 import com.gamestore.game_store_api.user.Role;
 import com.gamestore.game_store_api.user.UserAccount;
 import com.gamestore.game_store_api.user.UserAccountRepository;
@@ -83,5 +84,20 @@ class GameRepositoryTests {
 
 		assertTrue(userAccountRepository.findByEmailIgnoreCase("BUYER@test.example").isPresent());
 		assertTrue(userAccountRepository.existsByEmailIgnoreCase("buyer@Test.example"));
+	}
+
+	@Test
+	void composesCatalogSpecificationsForGenrePlatformPriceAndActiveState() {
+		gameRepository.saveAllAndFlush(java.util.List.of(
+				new Game("SPEC-1", "Space Tactics", null, "Strategy", "PC", new BigDecimal("20.00"), 3),
+				new Game("SPEC-2", "Console Tactics", null, "Strategy", "Console", new BigDecimal("25.00"), 3),
+				new Game("SPEC-3", "Cheap Tactics", null, "Strategy", "PC", new BigDecimal("5.00"), 3)));
+
+		var result = gameRepository.findAll(GameSpecifications.catalog(
+				"tactics", "strategy", "pc", new BigDecimal("10.00"), new BigDecimal("30.00"), true),
+				PageRequest.of(0, 10));
+
+		assertEquals(1, result.getTotalElements());
+		assertEquals("SPEC-1", result.getContent().getFirst().getSku());
 	}
 }

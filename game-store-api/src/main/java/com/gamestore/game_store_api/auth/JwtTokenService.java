@@ -31,6 +31,7 @@ public class JwtTokenService {
 		var expiresAt = issuedAt.plus(properties.accessTokenTtl());
 		var claims = JwtClaimsSet.builder()
 				.issuer(properties.issuer())
+				.audience(List.of(properties.audience()))
 				.issuedAt(issuedAt)
 				.expiresAt(expiresAt)
 				.subject(account.getEmail())
@@ -41,6 +42,6 @@ public class JwtTokenService {
 				.type("JWT")
 				.build();
 		var token = jwtEncoder.encode(JwtEncoderParameters.from(header, claims));
-		return new IssuedToken(token.getTokenValue(), expiresAt);
+		return new IssuedToken(token.getTokenValue(), expiresAt, properties.accessTokenTtl().toSeconds());
 	}
 }

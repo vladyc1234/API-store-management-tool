@@ -58,16 +58,18 @@ class ManagerGameControllerSecurityTests {
 	void managerCanCreateGame() throws Exception {
 		var now = LocalDateTime.of(2026, 1, 1, 12, 0);
 		when(gameService.create(any())).thenReturn(new GameResponse(
-				12L, "WEB-1", "Web Test", null, new BigDecimal("29.99"), 5, true, 0, now, now));
+				12L, "WEB-1", "Web Test", null, "Strategy", "PC",
+				new BigDecimal("29.99"), 5, true, 0, now, now));
 
-		mockMvc.perform(post("/api/manager/games")
+		mockMvc.perform(post("/api/v1/manager/games")
 				.with(jwt().authorities(new SimpleGrantedAuthority("ROLE_MANAGER")))
 				.header("X-Correlation-ID", "controller-test-123")
 				.contentType(MediaType.APPLICATION_JSON)
 				.content("""
-						{"sku":"WEB-1","title":"Web Test","description":null,"price":29.99,"stockQuantity":5}
+						{"sku":"WEB-1","title":"Web Test","description":null,"genre":"Strategy","platform":"PC","price":29.99,"stockQuantity":5}
 						"""))
 				.andExpect(status().isCreated())
+				.andExpect(header().string("Location", "/api/v1/games/12"))
 				.andExpect(header().string("X-Correlation-ID", "controller-test-123"))
 				.andExpect(jsonPath("$.id").value(12))
 				.andExpect(jsonPath("$.sku").value("WEB-1"))
@@ -79,10 +81,10 @@ class ManagerGameControllerSecurityTests {
 	@Test
 	void rejectsAnonymousAndBuyerRequestsWithConsistentSecurityProblems() throws Exception {
 		var body = """
-				{"sku":"SEC-1","title":"Security Test","price":10.00,"stockQuantity":1}
+				{"sku":"SEC-1","title":"Security Test","genre":"Action","platform":"PC","price":10.00,"stockQuantity":1}
 				""";
 
-		mockMvc.perform(post("/api/manager/games")
+		mockMvc.perform(post("/api/v1/manager/games")
 				.header("X-Correlation-ID", "anonymous-controller-123")
 				.contentType(MediaType.APPLICATION_JSON)
 				.content(body))
@@ -90,7 +92,7 @@ class ManagerGameControllerSecurityTests {
 				.andExpect(jsonPath("$.code").value("authentication_required"))
 				.andExpect(jsonPath("$.correlationId").value("anonymous-controller-123"));
 
-		mockMvc.perform(post("/api/manager/games")
+		mockMvc.perform(post("/api/v1/manager/games")
 				.with(jwt().authorities(new SimpleGrantedAuthority("ROLE_BUYER")))
 				.contentType(MediaType.APPLICATION_JSON)
 				.content(body))
@@ -102,11 +104,11 @@ class ManagerGameControllerSecurityTests {
 
 	@Test
 	void validatesManagerRequestBeforeCallingService() throws Exception {
-		mockMvc.perform(post("/api/manager/games")
+		mockMvc.perform(post("/api/v1/manager/games")
 				.with(jwt().authorities(new SimpleGrantedAuthority("ROLE_MANAGER")))
 				.contentType(MediaType.APPLICATION_JSON)
 				.content("""
-						{"sku":"VALIDATION-1","title":"Invalid Price","price":-1.00,"stockQuantity":1}
+						{"sku":"VALIDATION-1","title":"Invalid Price","genre":"Action","platform":"PC","price":-1.00,"stockQuantity":1}
 						"""))
 				.andExpect(status().isBadRequest())
 				.andExpect(jsonPath("$.code").value("validation_failed"))

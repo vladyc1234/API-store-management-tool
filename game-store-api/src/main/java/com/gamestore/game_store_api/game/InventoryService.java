@@ -15,11 +15,11 @@ public class InventoryService {
 	}
 
 	@Transactional(readOnly = true)
-	public InventoryPage inventory(String query, int page, int size) {
+	public InventoryPage inventory(String query, int lowStockThreshold, int page, int size) {
 		var normalizedQuery = query == null ? "" : query.trim();
 		var sort = Sort.by(Sort.Order.asc("title"), Sort.Order.asc("id"));
 		return InventoryPage.from(
-				gameRepository.searchInventory(normalizedQuery, PageRequest.of(page, size, sort)));
+				gameRepository.searchInventory(normalizedQuery, PageRequest.of(page, size, sort)), lowStockThreshold);
 	}
 
 	@Transactional(readOnly = true)

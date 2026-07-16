@@ -25,6 +25,7 @@ import com.gamestore.game_store_api.game.DuplicateGameSkuException;
 import com.gamestore.game_store_api.game.GameConflictException;
 import com.gamestore.game_store_api.game.GameNotFoundException;
 import com.gamestore.game_store_api.game.InvalidStockAdjustmentException;
+import com.gamestore.game_store_api.game.InvalidGameSearchException;
 import com.gamestore.game_store_api.purchase.InvalidPurchaseRequestException;
 import com.gamestore.game_store_api.purchase.InvalidStatisticsRangeException;
 import com.gamestore.game_store_api.purchase.PurchaseAccessException;
@@ -130,6 +131,11 @@ public class GlobalApiExceptionHandler {
 			HttpServletRequest request) {
 		return problem(HttpStatus.BAD_REQUEST, "invalid_stock_adjustment", "Invalid stock adjustment", exception,
 				request);
+	}
+
+	@ExceptionHandler(InvalidGameSearchException.class)
+	ProblemDetail handleInvalidGameSearch(InvalidGameSearchException exception, HttpServletRequest request) {
+		return problem(HttpStatus.BAD_REQUEST, "invalid_game_search", "Invalid game search", exception, request);
 	}
 
 	@ExceptionHandler(GameConflictException.class)

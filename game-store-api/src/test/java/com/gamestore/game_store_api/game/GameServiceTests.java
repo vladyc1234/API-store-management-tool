@@ -57,16 +57,14 @@ class GameServiceTests {
 	}
 
 	@Test
-	void convertsInsufficientStockIntoDomainConflictWithoutFlushing() {
+	void replacesStockWithAnAbsoluteQuantity() {
 		var game = new Game("STOCK-1", "Stock Test", null, new BigDecimal("8.00"), 2);
 		when(gameRepository.findById(42L)).thenReturn(Optional.of(game));
 
-		var exception = assertThrows(GameConflictException.class,
-				() -> gameService.changeStock(42L, new ChangeStockRequest(-3)));
+		var response = gameService.changeStock(42L, new ChangeStockRequest(9));
 
-		assertEquals("Stock adjustment would produce an invalid quantity", exception.getMessage());
-		assertEquals(2, game.getStockQuantity());
-		verify(gameRepository, never()).flush();
+		assertEquals(9, response.stockQuantity());
+		verify(gameRepository).flush();
 	}
 
 	@Test
@@ -74,11 +72,39 @@ class GameServiceTests {
 		var game = new Game("OFF-1", "Deactivate Test", null, new BigDecimal("5.00"), 1);
 		when(gameRepository.findById(7L)).thenReturn(Optional.of(game));
 
-		var first = gameService.deactivate(7L);
-		var second = gameService.deactivate(7L);
+		gameService.deactivate(7L);
+		gameService.deactivate(7L);
 
-		assertFalse(first.active());
-		assertFalse(second.active());
+		assertFalse(game.isActive());
 		verify(gameRepository).flush();
+	}
+
+	@Test
+	void changesPriceSuccessfully() {
+		var game = new Game("PRICE-1", "Price Test", null, new BigDecimal("5.00"), 1);
+		when(gameRepository.findById(5L)).thenReturn(Optional.of(game));
+
+		var response = gameService.changePrice(5L, new ChangePriceRequest(new BigDecimal("7.25")));
+
+		assertEquals(new BigDecimal("7.25"), response.price());
+		verify(gameRepository).flush();
+	}
+
+	@Test
+	void rejectsNonPositivePrice() {
+		var game = new Game("PRICE-2", "Price Test", null, new BigDecimal("5.00"), 1);
+		when(gameRepository.findById(6L)).thenReturn(Optional.of(game));
+
+		assertThrows(IllegalArgumentException.class,
+				() -> gameService.changePrice(6L, new ChangePriceRequest(BigDecimal.ZERO)));
+		verify(gameRepository, never()).flush();
+	}
+
+	@Test
+	void reportsMissingGame() {
+		when(gameRepository.findById(99L)).thenReturn(Optional.empty());
+
+		assertThrows(GameNotFoundException.class,
+				() -> gameService.changePrice(99L, new ChangePriceRequest(new BigDecimal("3.00"))));
 	}
 }

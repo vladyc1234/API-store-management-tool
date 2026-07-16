@@ -40,7 +40,10 @@ public class AuthenticationService {
 			throw new EmailAlreadyRegisteredException();
 		}
 
-		var account = new UserAccount(request.email(), passwordEncoder.encode(request.password()), Role.BUYER);
+		var encodedPassword = passwordEncoder.encode(request.password());
+		var account = request.displayName() == null || request.displayName().isBlank()
+				? new UserAccount(request.email(), encodedPassword, Role.BUYER)
+				: new UserAccount(request.email(), encodedPassword, request.displayName(), Role.BUYER);
 		try {
 			var savedAccount = userAccountRepository.saveAndFlush(account);
 			log.info("Registered buyer account with id {}", savedAccount.getId());

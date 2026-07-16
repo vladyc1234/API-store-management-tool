@@ -6,6 +6,7 @@ public record TopGameSalesResponse(
 		Long gameId,
 		String gameTitle,
 		long unitsSold,
+		long orderCount,
 		BigDecimal revenue) {
 
 	static TopGameSalesResponse from(TopGameSalesView sales) {
@@ -13,6 +14,7 @@ public record TopGameSalesResponse(
 				sales.getGameId(),
 				sales.getGameTitle(),
 				sales.getUnitsSold(),
+				sales.getOrderCount(),
 				sales.getRevenue());
 	}
 }

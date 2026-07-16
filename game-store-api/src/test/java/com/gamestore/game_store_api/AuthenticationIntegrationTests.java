@@ -63,22 +63,26 @@ class AuthenticationIntegrationTests {
 		var email = "buyer-" + UUID.randomUUID() + "@example.com";
 		var password = "safe-password-123";
 
-		var registration = post("/api/auth/register", credentials(email, password));
+		var registration = post("/api/v1/auth/register", "{\"email\":\"" + email
+				+ "\",\"displayName\":\"JWT Buyer\",\"password\":\"" + password + "\"}");
 		assertEquals(201, registration.statusCode());
 		assertFalse(registration.body().contains(password));
 
 		var savedBuyer = userAccountRepository.findByEmailIgnoreCase(email).orElseThrow();
 		assertEquals(Role.BUYER, savedBuyer.getRole());
+		assertEquals("JWT Buyer", savedBuyer.getDisplayName());
 		assertNotEquals(password, savedBuyer.getPasswordHash());
 		assertTrue(passwordEncoder.matches(password, savedBuyer.getPasswordHash()));
 
-		var login = post("/api/auth/login", credentials(email, password));
+		var login = post("/api/v1/auth/login", credentials(email, password));
 		assertEquals(200, login.statusCode());
+		assertTrue(login.body().contains("\"expiresIn\":3600"));
 
 		var jwt = jwtDecoder.decode(accessToken(login.body()));
 		assertEquals(email, jwt.getSubject());
 		assertEquals(savedBuyer.getId().toString(), jwt.getClaim("userId").toString());
 		assertEquals("BUYER", jwt.getClaimAsStringList("roles").getFirst());
+		assertEquals("game-store-api-clients", jwt.getAudience().getFirst());
 	}
 
 	@Test
@@ -190,5 +194,53 @@ class AuthenticationIntegrationTests {
 		String methodManagerProbe() {
 			return "manager";
 		}
+	}
+}
+
+@org.junit.jupiter.api.extension.ExtendWith(org.mockito.junit.jupiter.MockitoExtension.class)
+class AuthenticationServiceUnitTests {
+
+	@org.mockito.Mock
+	private com.gamestore.game_store_api.user.UserAccountRepository userRepository;
+	@org.mockito.Mock
+	private com.gamestore.game_store_api.auth.JwtTokenService jwtTokenService;
+
+	@Test
+	void registrationNormalizesEmailAndUsesBcrypt() {
+		var encoder = new org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder(4);
+		var service = new com.gamestore.game_store_api.auth.AuthenticationService(
+				userRepository, encoder, jwtTokenService);
+		org.mockito.Mockito.when(userRepository.existsByEmailIgnoreCase(" Buyer@Example.com ")).thenReturn(false);
+		org.mockito.Mockito.when(userRepository.saveAndFlush(
+				org.mockito.ArgumentMatchers.any(com.gamestore.game_store_api.user.UserAccount.class)))
+				.thenAnswer(invocation -> invocation.getArgument(0));
+
+		var account = service.registerBuyer(new com.gamestore.game_store_api.auth.RegisterRequest(
+				" Buyer@Example.com ", "Player One", "safe-password-123"));
+
+		org.assertj.core.api.Assertions.assertThat(account.getEmail()).isEqualTo("buyer@example.com");
+		org.assertj.core.api.Assertions.assertThat(account.getDisplayName()).isEqualTo("Player One");
+		org.assertj.core.api.Assertions.assertThat(encoder.matches("safe-password-123", account.getPasswordHash()))
+				.isTrue();
+	}
+
+	@Test
+	void duplicateRegistrationAndUnknownLoginFailSafely() {
+		var encoder = new org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder(4);
+		var service = new com.gamestore.game_store_api.auth.AuthenticationService(
+				userRepository, encoder, jwtTokenService);
+		org.mockito.Mockito.when(userRepository.existsByEmailIgnoreCase("buyer@example.com")).thenReturn(true);
+
+		org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.registerBuyer(
+				new com.gamestore.game_store_api.auth.RegisterRequest(
+						"buyer@example.com", "Buyer", "safe-password-123")))
+				.isInstanceOf(com.gamestore.game_store_api.auth.EmailAlreadyRegisteredException.class);
+
+		org.mockito.Mockito.when(userRepository.findByEmailIgnoreCase("missing@example.com"))
+				.thenReturn(java.util.Optional.empty());
+		org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.login(
+				new com.gamestore.game_store_api.auth.LoginRequest("missing@example.com", "safe-password-123")))
+				.isInstanceOf(org.springframework.security.authentication.BadCredentialsException.class)
+				.hasMessage("Invalid email or password");
 	}
 }

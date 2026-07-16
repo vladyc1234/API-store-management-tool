@@ -5,13 +5,14 @@ import java.util.Optional;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import jakarta.persistence.LockModeType;
 
-public interface GameRepository extends JpaRepository<Game, Long> {
+public interface GameRepository extends JpaRepository<Game, Long>, JpaSpecificationExecutor<Game> {
 
 	Optional<Game> findBySkuIgnoreCase(String sku);
 
@@ -54,4 +55,6 @@ public interface GameRepository extends JpaRepository<Game, Long> {
 	InventorySummaryView summarizeActiveInventory(@Param("threshold") int threshold);
 
 	long countByActiveFalse();
+
+	long countByActiveTrueAndStockQuantityLessThanEqual(int threshold);
 }

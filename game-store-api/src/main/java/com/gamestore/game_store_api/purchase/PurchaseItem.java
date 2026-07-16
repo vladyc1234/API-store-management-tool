@@ -47,9 +47,9 @@ public class PurchaseItem {
 	private String gameTitle;
 
 	@NotNull
-	@DecimalMin("0.00")
-	@Digits(integer = 8, fraction = 2)
-	@Column(name = "unit_price", nullable = false, precision = 10, scale = 2)
+	@DecimalMin("0.01")
+	@Digits(integer = 10, fraction = 2)
+	@Column(name = "unit_price", nullable = false, precision = 12, scale = 2)
 	private BigDecimal unitPrice;
 
 	@Positive

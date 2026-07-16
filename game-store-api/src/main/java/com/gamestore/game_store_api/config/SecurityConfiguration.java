@@ -17,12 +17,14 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.oauth2.jose.jws.MacAlgorithm;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.oauth2.jwt.JwtEncoder;
+import org.springframework.security.oauth2.jwt.JwtClaimValidator;
 import org.springframework.security.oauth2.jwt.JwtValidators;
 import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
 import org.springframework.security.oauth2.jwt.NimbusJwtEncoder;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
 import org.springframework.security.oauth2.server.resource.authentication.JwtGrantedAuthoritiesConverter;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.oauth2.core.DelegatingOAuth2TokenValidator;
 
 import com.gamestore.game_store_api.error.ApiAccessDeniedHandler;
 import com.gamestore.game_store_api.error.ApiAuthenticationEntryPoint;
@@ -42,12 +44,17 @@ public class SecurityConfiguration {
 				.securityContext(securityContext -> securityContext.requireExplicitSave(true))
 				.sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
 				.authorizeHttpRequests(authorize -> authorize
-						.requestMatchers("/api/auth/register", "/api/auth/login").permitAll()
+						.requestMatchers("/api/auth/register", "/api/auth/login",
+								"/api/v1/auth/register", "/api/v1/auth/login").permitAll()
 						.requestMatchers("/actuator/health", "/actuator/health/**").permitAll()
 						.requestMatchers("/v3/api-docs/**", "/swagger-ui.html", "/swagger-ui/**").permitAll()
 						.requestMatchers("/api/manager/**").hasRole(Role.MANAGER.name())
 						.requestMatchers("/api/buyer/**").hasRole(Role.BUYER.name())
 						.requestMatchers("/api/catalog/**")
+								.hasAnyRole(Role.BUYER.name(), Role.MANAGER.name())
+						.requestMatchers("/api/v1/manager/**").hasRole(Role.MANAGER.name())
+						.requestMatchers("/api/v1/purchases/**").hasRole(Role.BUYER.name())
+						.requestMatchers("/api/v1/games/**")
 								.hasAnyRole(Role.BUYER.name(), Role.MANAGER.name())
 						.anyRequest().authenticated())
 				.exceptionHandling(exceptions -> exceptions
@@ -95,7 +102,10 @@ public class SecurityConfiguration {
 		var decoder = NimbusJwtDecoder.withSecretKey(secretKey)
 				.macAlgorithm(MacAlgorithm.HS256)
 				.build();
-		decoder.setJwtValidator(JwtValidators.createDefaultWithIssuer(properties.issuer()));
+		var issuerValidator = JwtValidators.createDefaultWithIssuer(properties.issuer());
+		var audienceValidator = new JwtClaimValidator<java.util.List<String>>("aud",
+				audiences -> audiences != null && audiences.contains(properties.audience()));
+		decoder.setJwtValidator(new DelegatingOAuth2TokenValidator<>(issuerValidator, audienceValidator));
 		return decoder;
 	}
 

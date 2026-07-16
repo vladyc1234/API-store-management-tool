@@ -7,9 +7,11 @@ import java.util.List;
 public record PurchaseStatisticsResponse(
 		LocalDate from,
 		LocalDate to,
-		long completedPurchases,
+		long totalOrders,
 		BigDecimal totalRevenue,
+		String currency,
 		long unitsSold,
+		long lowStockGameCount,
 		long uniqueBuyers,
 		BigDecimal averageOrderValue,
 		List<TopGameSalesResponse> topGames) {

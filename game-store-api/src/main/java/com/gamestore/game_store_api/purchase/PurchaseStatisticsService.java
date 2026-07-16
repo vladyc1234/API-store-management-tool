@@ -11,19 +11,23 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.gamestore.game_store_api.game.GameRepository;
+
 @Service
 public class PurchaseStatisticsService {
 
 	private static final Logger log = LoggerFactory.getLogger(PurchaseStatisticsService.class);
 
 	private final PurchaseRepository purchaseRepository;
+	private final GameRepository gameRepository;
 
-	public PurchaseStatisticsService(PurchaseRepository purchaseRepository) {
+	public PurchaseStatisticsService(PurchaseRepository purchaseRepository, GameRepository gameRepository) {
 		this.purchaseRepository = purchaseRepository;
+		this.gameRepository = gameRepository;
 	}
 
 	@Transactional(readOnly = true)
-	public PurchaseStatisticsResponse statistics(LocalDate from, LocalDate to, int topLimit) {
+	public PurchaseStatisticsResponse statistics(LocalDate from, LocalDate to, int topLimit, int lowStockThreshold) {
 		if (from != null && to != null && from.isAfter(to)) {
 			throw new InvalidStatisticsRangeException("The from date must not be after the to date");
 		}
@@ -52,7 +56,9 @@ public class PurchaseStatisticsService {
 				to,
 				purchaseCount,
 				totalRevenue,
+				Purchase.V1_CURRENCY,
 				unitsSold == null ? 0 : unitsSold,
+				gameRepository.countByActiveTrueAndStockQuantityLessThanEqual(lowStockThreshold),
 				summary.getUniqueBuyerCount(),
 				averageOrderValue,
 				topGames);

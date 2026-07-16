@@ -35,6 +35,8 @@ import jakarta.validation.constraints.NotNull;
 @Table(name = "purchases")
 public class Purchase {
 
+	public static final String V1_CURRENCY = "EUR";
+
 	@Id
 	@GeneratedValue(strategy = GenerationType.IDENTITY)
 	private Long id;
@@ -54,6 +56,10 @@ public class Purchase {
 	@Digits(integer = 10, fraction = 2)
 	@Column(name = "total_amount", nullable = false, precision = 12, scale = 2)
 	private BigDecimal totalAmount = BigDecimal.ZERO.setScale(2);
+
+	@NotNull
+	@Column(nullable = false, length = 3)
+	private String currency = V1_CURRENCY;
 
 	@OneToMany(mappedBy = "purchase", cascade = CascadeType.ALL, orphanRemoval = true)
 	@OrderBy("id ASC")
@@ -119,6 +125,10 @@ public class Purchase {
 
 	public BigDecimal getTotalAmount() {
 		return totalAmount;
+	}
+
+	public String getCurrency() {
+		return currency;
 	}
 
 	public List<PurchaseItem> getItems() {

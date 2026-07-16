@@ -45,10 +45,20 @@ public class Game {
 	@Column(length = 5000)
 	private String description;
 
+	@NotBlank
+	@Size(max = 100)
+	@Column(nullable = false, length = 100)
+	private String genre;
+
+	@NotBlank
+	@Size(max = 100)
+	@Column(nullable = false, length = 100)
+	private String platform;
+
 	@NotNull
-	@DecimalMin("0.00")
-	@Digits(integer = 8, fraction = 2)
-	@Column(nullable = false, precision = 10, scale = 2)
+	@DecimalMin("0.01")
+	@Digits(integer = 10, fraction = 2)
+	@Column(nullable = false, precision = 12, scale = 2)
 	private BigDecimal price;
 
 	@PositiveOrZero
@@ -74,9 +84,16 @@ public class Game {
 	}
 
 	public Game(String sku, String title, String description, BigDecimal price, int stockQuantity) {
+		this(sku, title, description, "Uncategorized", "Unknown", price, stockQuantity);
+	}
+
+	public Game(String sku, String title, String description, String genre, String platform,
+			BigDecimal price, int stockQuantity) {
 		this.sku = requireText(sku, "sku").toUpperCase(Locale.ROOT);
 		this.title = requireText(title, "title");
 		this.description = normalizeDescription(description);
+		this.genre = requireText(genre, "genre");
+		this.platform = requireText(platform, "platform");
 		this.price = requireMoney(price);
 		if (stockQuantity < 0) {
 			throw new IllegalArgumentException("stockQuantity must not be negative");
@@ -105,6 +122,13 @@ public class Game {
 		this.stockQuantity -= quantity;
 	}
 
+	public void setStockQuantity(int quantity) {
+		if (quantity < 0) {
+			throw new IllegalArgumentException("stockQuantity must not be negative");
+		}
+		this.stockQuantity = quantity;
+	}
+
 	public void deactivate() {
 		this.active = false;
 	}
@@ -123,6 +147,14 @@ public class Game {
 
 	public String getDescription() {
 		return description;
+	}
+
+	public String getGenre() {
+		return genre;
+	}
+
+	public String getPlatform() {
+		return platform;
 	}
 
 	public BigDecimal getPrice() {
@@ -150,8 +182,8 @@ public class Game {
 	}
 
 	private static BigDecimal requireMoney(BigDecimal value) {
-		if (value == null || value.signum() < 0) {
-			throw new IllegalArgumentException("price must not be negative");
+		if (value == null || value.signum() <= 0) {
+			throw new IllegalArgumentException("price must be positive");
 		}
 		return value.setScale(2, RoundingMode.UNNECESSARY);
 	}

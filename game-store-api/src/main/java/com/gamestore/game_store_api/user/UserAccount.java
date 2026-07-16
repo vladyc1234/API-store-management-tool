@@ -40,6 +40,11 @@ public class UserAccount {
 	@Column(name = "password_hash", nullable = false, length = 255)
 	private String passwordHash;
 
+	@NotBlank
+	@Size(max = 100)
+	@Column(name = "display_name", nullable = false, length = 100)
+	private String displayName;
+
 	@NotNull
 	@Enumerated(EnumType.STRING)
 	@Column(nullable = false, length = 20)
@@ -60,8 +65,13 @@ public class UserAccount {
 	}
 
 	public UserAccount(String email, String passwordHash, Role role) {
+		this(email, passwordHash, defaultDisplayName(email), role);
+	}
+
+	public UserAccount(String email, String passwordHash, String displayName, Role role) {
 		this.email = normalizeEmail(email);
 		this.passwordHash = requireText(passwordHash, "passwordHash");
+		this.displayName = requireText(displayName, "displayName");
 		this.role = Objects.requireNonNull(role, "role must not be null");
 	}
 
@@ -89,6 +99,10 @@ public class UserAccount {
 		return passwordHash;
 	}
 
+	public String getDisplayName() {
+		return displayName;
+	}
+
 	public Role getRole() {
 		return role;
 	}
@@ -107,6 +121,12 @@ public class UserAccount {
 
 	private static String normalizeEmail(String value) {
 		return requireText(value, "email").toLowerCase(Locale.ROOT);
+	}
+
+	private static String defaultDisplayName(String email) {
+		var normalized = requireText(email, "email");
+		var separator = normalized.indexOf('@');
+		return separator > 0 ? normalized.substring(0, separator) : normalized;
 	}
 
 	private static String requireText(String value, String fieldName) {

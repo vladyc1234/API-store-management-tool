@@ -10,5 +10,7 @@ public interface TopGameSalesView {
 
 	long getUnitsSold();
 
+	long getOrderCount();
+
 	BigDecimal getRevenue();
 }

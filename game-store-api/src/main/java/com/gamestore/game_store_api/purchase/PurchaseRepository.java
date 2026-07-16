@@ -56,6 +56,7 @@ public interface PurchaseRepository extends JpaRepository<Purchase, Long> {
 			select item.game.id as gameId,
 			       item.gameTitle as gameTitle,
 			       sum(item.quantity) as unitsSold,
+			       count(distinct purchase.id) as orderCount,
 			       sum(item.lineTotal) as revenue
 			from Purchase purchase join purchase.items item
 			where purchase.status = :status

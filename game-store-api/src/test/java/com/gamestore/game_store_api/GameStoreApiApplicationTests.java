@@ -34,7 +34,7 @@ class GameStoreApiApplicationTests {
 
 	@Test
 	void applicationStartsWithCoreInfrastructure() {
-		assertEquals("1", applicationContext.getBean(Flyway.class).info().current().getVersion().toString());
+		assertEquals("2", applicationContext.getBean(Flyway.class).info().current().getVersion().toString());
 		assertTrue(applicationContext.getBeanNamesForType(SecurityFilterChain.class).length > 0);
 		assertTrue(applicationContext.getBeanNamesForType(UserAccountRepository.class).length > 0);
 		assertTrue(applicationContext.getBeanNamesForType(GameRepository.class).length > 0);
@@ -69,7 +69,28 @@ class GameStoreApiApplicationTests {
 		assertEquals(200, response.statusCode());
 		assertTrue(response.body().contains("\"title\":\"Game Store Management API\""));
 		assertTrue(response.body().contains("\"bearerAuth\""));
-		assertTrue(response.body().contains("/api/buyer/purchases"));
-		assertTrue(response.body().contains("/api/manager/statistics/purchases"));
+		assertTrue(response.body().contains("/api/v1/purchases"));
+		assertTrue(response.body().contains("/api/v1/manager/statistics/purchases"));
+	}
+}
+
+@org.springframework.test.context.ActiveProfiles({"test", "prod"})
+@org.springframework.boot.test.context.SpringBootTest(
+		webEnvironment = org.springframework.boot.test.context.SpringBootTest.WebEnvironment.RANDOM_PORT)
+class ProductionProfileSmokeTests {
+
+	@org.springframework.boot.test.web.server.LocalServerPort
+	private int port;
+
+	@Test
+	void productionProfileDisablesOpenApiEndpoints() throws Exception {
+		var request = HttpRequest.newBuilder()
+				.uri(URI.create("http://localhost:" + port + "/v3/api-docs"))
+				.GET()
+				.build();
+
+		var response = HttpClient.newHttpClient().send(request, HttpResponse.BodyHandlers.ofString());
+
+		assertEquals(404, response.statusCode());
 	}
 }
