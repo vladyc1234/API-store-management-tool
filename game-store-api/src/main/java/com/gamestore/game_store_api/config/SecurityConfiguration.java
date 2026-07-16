@@ -24,6 +24,8 @@ import org.springframework.security.oauth2.server.resource.authentication.JwtAut
 import org.springframework.security.oauth2.server.resource.authentication.JwtGrantedAuthoritiesConverter;
 import org.springframework.security.web.SecurityFilterChain;
 
+import com.gamestore.game_store_api.error.ApiAccessDeniedHandler;
+import com.gamestore.game_store_api.error.ApiAuthenticationEntryPoint;
 import com.gamestore.game_store_api.user.Role;
 
 @Configuration(proxyBeanMethods = false)
@@ -31,7 +33,8 @@ import com.gamestore.game_store_api.user.Role;
 public class SecurityConfiguration {
 
 	@Bean
-	SecurityFilterChain securityFilterChain(HttpSecurity http, JwtAuthenticationConverter jwtAuthenticationConverter)
+	SecurityFilterChain securityFilterChain(HttpSecurity http, JwtAuthenticationConverter jwtAuthenticationConverter,
+			ApiAuthenticationEntryPoint authenticationEntryPoint, ApiAccessDeniedHandler accessDeniedHandler)
 			throws Exception {
 		return http
 				.csrf(AbstractHttpConfigurer::disable)
@@ -46,7 +49,12 @@ public class SecurityConfiguration {
 						.requestMatchers("/api/catalog/**")
 								.hasAnyRole(Role.BUYER.name(), Role.MANAGER.name())
 						.anyRequest().authenticated())
+				.exceptionHandling(exceptions -> exceptions
+						.authenticationEntryPoint(authenticationEntryPoint)
+						.accessDeniedHandler(accessDeniedHandler))
 				.oauth2ResourceServer(resourceServer -> resourceServer
+						.authenticationEntryPoint(authenticationEntryPoint)
+						.accessDeniedHandler(accessDeniedHandler)
 						.jwt(jwt -> jwt.jwtAuthenticationConverter(jwtAuthenticationConverter)))
 				.httpBasic(AbstractHttpConfigurer::disable)
 				.formLogin(AbstractHttpConfigurer::disable)
