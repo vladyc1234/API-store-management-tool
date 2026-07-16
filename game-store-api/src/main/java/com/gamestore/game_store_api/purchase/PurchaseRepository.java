@@ -1,5 +1,7 @@
 package com.gamestore.game_store_api.purchase;
 
+import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
 
 import org.springframework.data.domain.Page;
@@ -23,4 +25,48 @@ public interface PurchaseRepository extends JpaRepository<Purchase, Long> {
 			@Param("buyerId") Long buyerId);
 
 	long countByStatus(PurchaseStatus status);
+
+	@Query("""
+			select count(purchase) as purchaseCount,
+			       coalesce(sum(purchase.totalAmount), 0.00) as totalRevenue,
+			       count(distinct purchase.buyer.id) as uniqueBuyerCount
+			from Purchase purchase
+			where purchase.status = :status
+			  and (:fromDate is null or purchase.createdAt >= :fromDate)
+			  and (:toDateExclusive is null or purchase.createdAt < :toDateExclusive)
+			""")
+	PurchaseStatisticsView summarizePurchases(
+			@Param("status") PurchaseStatus status,
+			@Param("fromDate") LocalDateTime fromDate,
+			@Param("toDateExclusive") LocalDateTime toDateExclusive);
+
+	@Query("""
+			select coalesce(sum(item.quantity), 0)
+			from Purchase purchase join purchase.items item
+			where purchase.status = :status
+			  and (:fromDate is null or purchase.createdAt >= :fromDate)
+			  and (:toDateExclusive is null or purchase.createdAt < :toDateExclusive)
+			""")
+	Long sumUnitsSold(
+			@Param("status") PurchaseStatus status,
+			@Param("fromDate") LocalDateTime fromDate,
+			@Param("toDateExclusive") LocalDateTime toDateExclusive);
+
+	@Query("""
+			select item.game.id as gameId,
+			       item.gameTitle as gameTitle,
+			       sum(item.quantity) as unitsSold,
+			       sum(item.lineTotal) as revenue
+			from Purchase purchase join purchase.items item
+			where purchase.status = :status
+			  and (:fromDate is null or purchase.createdAt >= :fromDate)
+			  and (:toDateExclusive is null or purchase.createdAt < :toDateExclusive)
+			group by item.game.id, item.gameTitle
+			order by sum(item.quantity) desc, sum(item.lineTotal) desc, item.game.id asc
+			""")
+	List<TopGameSalesView> findTopSellingGames(
+			@Param("status") PurchaseStatus status,
+			@Param("fromDate") LocalDateTime fromDate,
+			@Param("toDateExclusive") LocalDateTime toDateExclusive,
+			Pageable pageable);
 }
