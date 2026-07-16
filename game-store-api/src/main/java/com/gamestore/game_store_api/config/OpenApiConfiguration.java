@@ -29,7 +29,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 		type = SecuritySchemeType.HTTP,
 		scheme = "bearer",
 		bearerFormat = "JWT",
-		description = "JWT returned by POST /api/auth/login")
+		description = "JWT returned by POST /api/v1/auth/login")
 public class OpenApiConfiguration {
 
 	public static final String BEARER_AUTH = "bearerAuth";

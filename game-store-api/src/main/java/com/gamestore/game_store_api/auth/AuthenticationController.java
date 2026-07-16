@@ -14,7 +14,7 @@ import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 
 @RestController
-@RequestMapping({"/api/v1/auth", "/api/auth"})
+@RequestMapping("/api/v1/auth")
 @Tag(name = "Authentication")
 public class AuthenticationController {
 
@@ -26,7 +26,9 @@ public class AuthenticationController {
 
 	@PostMapping("/register")
 	@ResponseStatus(HttpStatus.CREATED)
-	@Operation(summary = "Register a buyer", description = "Creates an enabled BUYER account and hashes the supplied password.")
+	@Operation(
+			summary = "Register a buyer",
+			description = "Creates an enabled BUYER account. Passwords must contain 6 to 72 characters, including at least one letter and one special character.")
 	@ApiResponses({
 			@ApiResponse(responseCode = "201", description = "Buyer registered"),
 			@ApiResponse(responseCode = "400", description = "Request validation failed"),

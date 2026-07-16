@@ -20,6 +20,7 @@ import com.gamestore.game_store_api.purchase.PurchaseRepository;
 import com.gamestore.game_store_api.user.UserAccountRepository;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @ActiveProfiles("test")
@@ -69,6 +70,8 @@ class GameStoreApiApplicationTests {
 		assertEquals(200, response.statusCode());
 		assertTrue(response.body().contains("\"title\":\"Game Store Management API\""));
 		assertTrue(response.body().contains("\"bearerAuth\""));
+		assertTrue(response.body().contains("/api/v1/auth/login"));
+		assertFalse(response.body().contains("\"/api/auth/login\""));
 		assertTrue(response.body().contains("/api/v1/purchases"));
 		assertTrue(response.body().contains("/api/v1/manager/statistics/purchases"));
 	}

@@ -32,7 +32,7 @@ class ApiErrorIntegrationTests {
 	@Test
 	void returnsConsistentValidationProblemAndPreservesValidCorrelationId() throws Exception {
 		var correlationId = "validation-test-123";
-		var response = request("POST", "/api/auth/register", null, "{\"email\":\"not-an-email\",\"password\":\"short\"}",
+		var response = request("POST", "/api/v1/auth/register", null, "{\"email\":\"not-an-email\",\"password\":\"short\"}",
 				correlationId);
 
 		assertEquals(400, response.statusCode());
@@ -42,7 +42,7 @@ class ApiErrorIntegrationTests {
 				"\"status\":400",
 				"\"code\":\"validation_failed\"",
 				"\"correlationId\":\"" + correlationId + "\"",
-				"\"instance\":\"/api/auth/register\"",
+				"\"instance\":\"/api/v1/auth/register\"",
 				"\"timestamp\":",
 				"\"errors\":",
 				"\"field\":\"email\"",
@@ -93,8 +93,8 @@ class ApiErrorIntegrationTests {
 	private String registerAndLoginBuyer() throws Exception {
 		var email = "errors-" + UUID.randomUUID() + "@example.com";
 		var password = "safe-password-123";
-		assertEquals(201, request("POST", "/api/auth/register", null, credentials(email, password), null).statusCode());
-		var login = request("POST", "/api/auth/login", null, credentials(email, password), null);
+		assertEquals(201, request("POST", "/api/v1/auth/register", null, credentials(email, password), null).statusCode());
+		var login = request("POST", "/api/v1/auth/login", null, credentials(email, password), null);
 		assertEquals(200, login.statusCode());
 		var matcher = ACCESS_TOKEN_PATTERN.matcher(login.body());
 		assertTrue(matcher.find(), "response did not contain an access token");

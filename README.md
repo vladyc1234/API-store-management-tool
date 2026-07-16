@@ -105,6 +105,9 @@ The `prod` profile disables both Swagger UI and the generated API document.
 | GET | `/api/v1/manager/statistics/purchases` | Manager | View EUR sales statistics |
 | GET | `/actuator/health` | Public | Minimal readiness check |
 
+Buyer registration passwords must be 6–72 characters long and contain at least one letter and one
+special character. Authentication is exposed only under the versioned `/api/v1/auth` path.
+
 ## API examples
 
 The examples below use Bash/Git Bash syntax and `curl`. PowerShell users can run the same requests

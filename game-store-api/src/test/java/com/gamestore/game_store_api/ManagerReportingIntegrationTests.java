@@ -136,7 +136,7 @@ class ManagerReportingIntegrationTests {
 	}
 
 	private String managerToken() throws Exception {
-		var login = request("POST", "/api/auth/login", null,
+		var login = request("POST", "/api/v1/auth/login", null,
 				credentials(managerProperties.managerEmail(), managerProperties.managerPassword()));
 		assertEquals(200, login.statusCode());
 		return accessToken(login.body());
@@ -145,8 +145,8 @@ class ManagerReportingIntegrationTests {
 	private String registerAndLoginBuyer() throws Exception {
 		var email = "reporting-" + UUID.randomUUID() + "@example.com";
 		var password = "safe-password-123";
-		assertEquals(201, request("POST", "/api/auth/register", null, credentials(email, password)).statusCode());
-		var login = request("POST", "/api/auth/login", null, credentials(email, password));
+		assertEquals(201, request("POST", "/api/v1/auth/register", null, credentials(email, password)).statusCode());
+		var login = request("POST", "/api/v1/auth/login", null, credentials(email, password));
 		assertEquals(200, login.statusCode());
 		return accessToken(login.body());
 	}

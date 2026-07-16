@@ -86,13 +86,49 @@ class AuthenticationIntegrationTests {
 	}
 
 	@Test
+	void registrationAcceptsSixCharactersAndRequiresLettersAndSpecialCharacters() throws Exception {
+		var validEmail = "six-character-" + UUID.randomUUID() + "@example.com";
+		assertEquals(201, post("/api/v1/auth/register", credentials(validEmail, "Abc1!2")).statusCode());
+
+		var maximumLengthEmail = "maximum-length-" + UUID.randomUUID() + "@example.com";
+		assertEquals(201, post("/api/v1/auth/register",
+				credentials(maximumLengthEmail, "A!" + "1".repeat(70))).statusCode());
+
+		var tooShortEmail = "too-short-" + UUID.randomUUID() + "@example.com";
+		assertEquals(400, post("/api/v1/auth/register", credentials(tooShortEmail, "Ab!12")).statusCode());
+
+		var tooLongEmail = "too-long-" + UUID.randomUUID() + "@example.com";
+		assertEquals(400, post("/api/v1/auth/register",
+				credentials(tooLongEmail, "A!" + "1".repeat(71))).statusCode());
+
+		var noSpecialCharacterEmail = "no-special-" + UUID.randomUUID() + "@example.com";
+		assertEquals(400,
+				post("/api/v1/auth/register", credentials(noSpecialCharacterEmail, "Abc123")).statusCode());
+
+		var noLetterEmail = "no-letter-" + UUID.randomUUID() + "@example.com";
+		assertEquals(400,
+				post("/api/v1/auth/register", credentials(noLetterEmail, "12345!")).statusCode());
+	}
+
+	@Test
+	void unversionedAuthenticationAliasIsNotExposed() throws Exception {
+		var email = "versioned-auth-" + UUID.randomUUID() + "@example.com";
+		var password = "safe-password-123";
+		assertEquals(201, post("/api/v1/auth/register", credentials(email, password)).statusCode());
+		var login = post("/api/v1/auth/login", credentials(email, password));
+		var token = accessToken(login.body());
+
+		assertEquals(404, post("/api/auth/login", credentials(email, password), token).statusCode());
+	}
+
+	@Test
 	void rejectsDuplicateBuyerRegistrationAndInvalidLogin() throws Exception {
 		var email = "duplicate-" + UUID.randomUUID() + "@example.com";
 		var password = "safe-password-123";
 
-		assertEquals(201, post("/api/auth/register", credentials(email, password)).statusCode());
-		assertEquals(409, post("/api/auth/register", credentials(email, password)).statusCode());
-		assertEquals(401, post("/api/auth/login", credentials(email, "wrong-password")).statusCode());
+		assertEquals(201, post("/api/v1/auth/register", credentials(email, password)).statusCode());
+		assertEquals(409, post("/api/v1/auth/register", credentials(email, password)).statusCode());
+		assertEquals(401, post("/api/v1/auth/login", credentials(email, "wrong-password")).statusCode());
 	}
 
 	@Test
@@ -109,7 +145,7 @@ class AuthenticationIntegrationTests {
 		assertNotEquals(managerProperties.managerPassword(), manager.getPasswordHash());
 		assertTrue(passwordEncoder.matches(managerProperties.managerPassword(), manager.getPasswordHash()));
 
-		var login = post("/api/auth/login",
+		var login = post("/api/v1/auth/login",
 				credentials(managerProperties.managerEmail(), managerProperties.managerPassword()));
 		assertEquals(200, login.statusCode());
 		assertEquals("MANAGER",
@@ -120,10 +156,10 @@ class AuthenticationIntegrationTests {
 	void enforcesStatelessBuyerManagerAndMethodRoleMappings() throws Exception {
 		var buyerEmail = "roles-" + UUID.randomUUID() + "@example.com";
 		var buyerPassword = "safe-password-123";
-		assertEquals(201, post("/api/auth/register", credentials(buyerEmail, buyerPassword)).statusCode());
+		assertEquals(201, post("/api/v1/auth/register", credentials(buyerEmail, buyerPassword)).statusCode());
 
-		var buyerToken = accessToken(post("/api/auth/login", credentials(buyerEmail, buyerPassword)).body());
-		var managerToken = accessToken(post("/api/auth/login",
+		var buyerToken = accessToken(post("/api/v1/auth/login", credentials(buyerEmail, buyerPassword)).body());
+		var managerToken = accessToken(post("/api/v1/auth/login",
 				credentials(managerProperties.managerEmail(), managerProperties.managerPassword())).body());
 
 		var anonymousResponse = get("/api/buyer/security-probe", null);
@@ -139,12 +175,18 @@ class AuthenticationIntegrationTests {
 	}
 
 	private HttpResponse<String> post(String path, String body) throws Exception {
+		return post(path, body, null);
+	}
+
+	private HttpResponse<String> post(String path, String body, String accessToken) throws Exception {
 		var request = HttpRequest.newBuilder()
 				.uri(URI.create("http://localhost:" + port + path))
 				.header("Content-Type", "application/json")
-				.POST(HttpRequest.BodyPublishers.ofString(body))
-				.build();
-		return HTTP_CLIENT.send(request, HttpResponse.BodyHandlers.ofString());
+				.POST(HttpRequest.BodyPublishers.ofString(body));
+		if (accessToken != null) {
+			request.header("Authorization", "Bearer " + accessToken);
+		}
+		return HTTP_CLIENT.send(request.build(), HttpResponse.BodyHandlers.ofString());
 	}
 
 	private HttpResponse<String> get(String path, String accessToken) throws Exception {
