@@ -6,10 +6,18 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 
 import org.junit.jupiter.api.Test;
+import org.flywaydb.core.Flyway;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.SpringBootTest.WebEnvironment;
 import org.springframework.boot.test.web.server.LocalServerPort;
+import org.springframework.context.ApplicationContext;
+import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.test.context.ActiveProfiles;
+
+import com.gamestore.game_store_api.game.GameRepository;
+import com.gamestore.game_store_api.purchase.PurchaseRepository;
+import com.gamestore.game_store_api.user.UserAccountRepository;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -21,8 +29,16 @@ class GameStoreApiApplicationTests {
 	@LocalServerPort
 	private int port;
 
+	@Autowired
+	private ApplicationContext applicationContext;
+
 	@Test
-	void contextLoads() {
+	void applicationStartsWithCoreInfrastructure() {
+		assertEquals("1", applicationContext.getBean(Flyway.class).info().current().getVersion().toString());
+		assertTrue(applicationContext.getBeanNamesForType(SecurityFilterChain.class).length > 0);
+		assertTrue(applicationContext.getBeanNamesForType(UserAccountRepository.class).length > 0);
+		assertTrue(applicationContext.getBeanNamesForType(GameRepository.class).length > 0);
+		assertTrue(applicationContext.getBeanNamesForType(PurchaseRepository.class).length > 0);
 	}
 
 	@Test
@@ -37,5 +53,6 @@ class GameStoreApiApplicationTests {
 
 		assertEquals(200, response.statusCode());
 		assertTrue(response.body().contains("\"status\":\"UP\""));
+		assertTrue(response.headers().firstValue("X-Correlation-ID").isPresent());
 	}
 }
