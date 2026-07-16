@@ -25,6 +25,7 @@ import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.OneToMany;
+import jakarta.persistence.OrderBy;
 import jakarta.persistence.Table;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Digits;
@@ -55,6 +56,7 @@ public class Purchase {
 	private BigDecimal totalAmount = BigDecimal.ZERO.setScale(2);
 
 	@OneToMany(mappedBy = "purchase", cascade = CascadeType.ALL, orphanRemoval = true)
+	@OrderBy("id ASC")
 	private final List<PurchaseItem> items = new ArrayList<>();
 
 	@CreationTimestamp

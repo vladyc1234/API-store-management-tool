@@ -5,8 +5,11 @@ import java.util.Optional;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
+
+import jakarta.persistence.LockModeType;
 
 public interface GameRepository extends JpaRepository<Game, Long> {
 
@@ -17,6 +20,10 @@ public interface GameRepository extends JpaRepository<Game, Long> {
 	Page<Game> findByActiveTrue(Pageable pageable);
 
 	Optional<Game> findByIdAndActiveTrue(Long id);
+
+	@Lock(LockModeType.PESSIMISTIC_WRITE)
+	@Query("select game from Game game where game.id = :id")
+	Optional<Game> findByIdForUpdate(@Param("id") Long id);
 
 	@Query("""
 			select game from Game game
