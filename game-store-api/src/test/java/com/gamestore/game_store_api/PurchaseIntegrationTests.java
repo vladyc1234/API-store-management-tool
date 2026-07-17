@@ -51,7 +51,7 @@ class PurchaseIntegrationTests {
 		var firstGameId = createGame(managerToken, uniqueSku("BUY-A"), firstTitle, "10.00", 3);
 		var secondGameId = createGame(managerToken, uniqueSku("BUY-B"), secondTitle, "5.00", 4);
 
-		var purchase = request("POST", "/api/buyer/purchases", buyerToken,
+		var purchase = request("POST", "/api/v1/purchases", buyerToken,
 				purchaseJson(firstGameId, 2, secondGameId, 3));
 		assertEquals(201, purchase.statusCode());
 		assertTrue(purchase.body().contains("\"status\":\"COMPLETED\""));
@@ -63,18 +63,18 @@ class PurchaseIntegrationTests {
 
 		assertEquals(200, request("PATCH", "/api/manager/games/" + firstGameId + "/price", managerToken,
 				"{\"price\":19.00}").statusCode());
-		var detail = request("GET", "/api/buyer/purchases/" + purchaseId, buyerToken, null);
+		var detail = request("GET", "/api/v1/purchases/" + purchaseId, buyerToken, null);
 		assertEquals(200, detail.statusCode());
 		assertTrue(detail.body().contains(firstTitle));
 		assertTrue(detail.body().contains(secondTitle));
 		assertTrue(detail.body().contains("\"unitPrice\":10.00"));
 
-		var history = request("GET", "/api/buyer/purchases?page=0&size=10", buyerToken, null);
+		var history = request("GET", "/api/v1/purchases/me?page=0&size=10", buyerToken, null);
 		assertEquals(200, history.statusCode());
 		assertTrue(history.body().contains("\"id\":" + purchaseId));
 		assertEquals(404,
-				request("GET", "/api/buyer/purchases/" + purchaseId, otherBuyerToken, null).statusCode());
-		assertEquals(403, request("GET", "/api/buyer/purchases", managerToken, null).statusCode());
+				request("GET", "/api/v1/purchases/" + purchaseId, otherBuyerToken, null).statusCode());
+		assertEquals(403, request("GET", "/api/v1/purchases/me", managerToken, null).statusCode());
 	}
 
 	@Test
@@ -85,7 +85,7 @@ class PurchaseIntegrationTests {
 		var secondGameId = createGame(managerToken, uniqueSku("ROLLBACK-B"), "Rollback Game B", "8.00", 1);
 		var purchasesBefore = purchaseRepository.count();
 
-		var failedPurchase = request("POST", "/api/buyer/purchases", buyerToken,
+		var failedPurchase = request("POST", "/api/v1/purchases", buyerToken,
 				purchaseJson(firstGameId, 2, secondGameId, 2));
 		assertEquals(409, failedPurchase.statusCode());
 		assertEquals(5, gameRepository.findById(firstGameId).orElseThrow().getStockQuantity());
@@ -95,7 +95,7 @@ class PurchaseIntegrationTests {
 		var duplicateGameRequest = "{\"items\":[{\"gameId\":" + firstGameId
 				+ ",\"quantity\":1},{\"gameId\":" + firstGameId + ",\"quantity\":1}]}";
 		assertEquals(400,
-				request("POST", "/api/buyer/purchases", buyerToken, duplicateGameRequest).statusCode());
+				request("POST", "/api/v1/purchases", buyerToken, duplicateGameRequest).statusCode());
 		assertEquals(5, gameRepository.findById(firstGameId).orElseThrow().getStockQuantity());
 		assertEquals(purchasesBefore, purchaseRepository.count());
 	}

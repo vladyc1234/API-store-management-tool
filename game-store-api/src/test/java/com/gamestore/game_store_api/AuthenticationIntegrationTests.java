@@ -162,12 +162,12 @@ class AuthenticationIntegrationTests {
 		var managerToken = accessToken(post("/api/v1/auth/login",
 				credentials(managerProperties.managerEmail(), managerProperties.managerPassword())).body());
 
-		var anonymousResponse = get("/api/buyer/security-probe", null);
+		var anonymousResponse = get("/api/v1/purchases/security-probe", null);
 		assertEquals(401, anonymousResponse.statusCode());
 		assertTrue(anonymousResponse.headers().firstValue("Set-Cookie").isEmpty());
 
-		assertEquals(200, get("/api/buyer/security-probe", buyerToken).statusCode());
-		assertEquals(403, get("/api/buyer/security-probe", managerToken).statusCode());
+		assertEquals(200, get("/api/v1/purchases/security-probe", buyerToken).statusCode());
+		assertEquals(403, get("/api/v1/purchases/security-probe", managerToken).statusCode());
 		assertEquals(403, get("/api/manager/security-probe", buyerToken).statusCode());
 		assertEquals(200, get("/api/manager/security-probe", managerToken).statusCode());
 		assertEquals(403, get("/api/security/method-manager-probe", buyerToken).statusCode());
@@ -221,7 +221,7 @@ class AuthenticationIntegrationTests {
 	@RestController
 	static class SecurityProbeController {
 
-		@GetMapping("/api/buyer/security-probe")
+		@GetMapping("/api/v1/purchases/security-probe")
 		String buyerProbe() {
 			return "buyer";
 		}

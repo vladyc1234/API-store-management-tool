@@ -94,9 +94,9 @@ class ManagerReportingIntegrationTests {
 		var firstGameId = createGame(managerToken, marker + "-A", firstTitle, "10.00", 10);
 		var secondGameId = createGame(managerToken, marker + "-B", secondTitle, "5.00", 10);
 
-		assertEquals(201, request("POST", "/api/buyer/purchases", firstBuyerToken,
+		assertEquals(201, request("POST", "/api/v1/purchases", firstBuyerToken,
 				purchaseJson(firstGameId, 2, secondGameId, 1)).statusCode());
-		assertEquals(201, request("POST", "/api/buyer/purchases", secondBuyerToken,
+		assertEquals(201, request("POST", "/api/v1/purchases", secondBuyerToken,
 				singleItemPurchaseJson(firstGameId, 1)).statusCode());
 
 		var statistics = request("GET", "/api/v1/manager/statistics/purchases?topLimit=5&lowStockThreshold=5",

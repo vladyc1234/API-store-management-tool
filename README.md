@@ -99,8 +99,9 @@ The `prod` profile disables both Swagger UI and the generated API document.
 | PATCH | `/api/v1/manager/games/{id}/price` | Manager | Replace a price |
 | PATCH | `/api/v1/manager/games/{id}/stock` | Manager | Set absolute stock |
 | DELETE | `/api/v1/manager/games/{id}` | Manager | Soft-deactivate a game |
-| POST | `/api/v1/purchases` | Buyer | Buy one game |
+| POST | `/api/v1/purchases` | Buyer | Buy one or more games atomically |
 | GET | `/api/v1/purchases/me` | Buyer | View personal purchase history |
+| GET | `/api/v1/purchases/{purchaseId}` | Buyer | View an owned purchase |
 | GET | `/api/v1/manager/inventory` | Manager | View stock and low-stock state |
 | GET | `/api/v1/manager/statistics/purchases` | Manager | View EUR sales statistics |
 | GET | `/actuator/health` | Public | Minimal readiness check |
@@ -142,7 +143,7 @@ GAME_ID=1
 curl -X POST http://localhost:8080/api/v1/purchases \
   -H "Authorization: Bearer $TOKEN" \
   -H 'Content-Type: application/json' \
-  -d "{\"gameId\":$GAME_ID,\"quantity\":1}"
+  -d "{\"items\":[{\"gameId\":$GAME_ID,\"quantity\":1}]}"
 
 curl http://localhost:8080/api/v1/purchases/me \
   -H "Authorization: Bearer $TOKEN"

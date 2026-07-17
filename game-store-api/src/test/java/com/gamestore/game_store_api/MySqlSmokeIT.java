@@ -72,7 +72,7 @@ class MySqlSmokeIT {
 		assertTrue(catalog.body().contains(sku));
 
 		var purchase = request("POST", "/api/v1/purchases", buyerToken,
-				"{\"gameId\":" + gameId + ",\"quantity\":1}");
+				"{\"items\":[{\"gameId\":" + gameId + ",\"quantity\":1}]}");
 		assertEquals(201, purchase.statusCode());
 		assertTrue(purchase.body().contains("\"totalAmount\":19.99"));
 		assertTrue(purchase.body().contains("\"currency\":\"EUR\""));

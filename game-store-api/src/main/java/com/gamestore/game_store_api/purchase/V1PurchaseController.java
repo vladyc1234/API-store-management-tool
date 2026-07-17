@@ -6,6 +6,7 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -23,19 +24,20 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.Positive;
 
 @Validated
 @RestController
 @RequestMapping("/api/v1/purchases")
 @PreAuthorize("hasRole('BUYER')")
-@Tag(name = "Buyer purchases v1")
+@Tag(name = "Buyer purchases")
 @SecurityRequirement(name = OpenApiConfiguration.BEARER_AUTH)
 @ApiResponses({
 		@ApiResponse(responseCode = "400", description = "Request validation failed"),
 		@ApiResponse(responseCode = "401", description = "A valid bearer token is required"),
-		@ApiResponse(responseCode = "403", description = "BUYER role is required"),
-		@ApiResponse(responseCode = "404", description = "Game not found"),
-		@ApiResponse(responseCode = "409", description = "Game is inactive or stock is insufficient")
+		@ApiResponse(responseCode = "403", description = "BUYER role or purchase ownership is required"),
+		@ApiResponse(responseCode = "404", description = "Purchase or game not found"),
+		@ApiResponse(responseCode = "409", description = "Stock or concurrent-update conflict")
 })
 public class V1PurchaseController {
 
@@ -47,11 +49,11 @@ public class V1PurchaseController {
 
 	@PostMapping
 	@ResponseStatus(HttpStatus.CREATED)
-	@Operation(summary = "Purchase one game",
-			description = "Locks the game, snapshots its EUR price, reduces stock, and records the purchase atomically.")
+	@Operation(summary = "Purchase games",
+			description = "Atomically validates active stock, deducts units, snapshots current EUR prices, and completes a multi-item purchase.")
 	public PurchaseResponse purchase(@AuthenticationPrincipal Jwt jwt,
-			@Valid @RequestBody SingleGamePurchaseRequest request) {
-		return purchaseService.purchase(userId(jwt), request.toPurchaseRequest());
+			@Valid @RequestBody CreatePurchaseRequest request) {
+		return purchaseService.purchase(userId(jwt), request);
 	}
 
 	@GetMapping("/me")
@@ -61,6 +63,14 @@ public class V1PurchaseController {
 			@RequestParam(defaultValue = "0") @Min(0) int page,
 			@RequestParam(defaultValue = "20") @Min(1) @Max(100) int size) {
 		return purchaseService.history(userId(jwt), page, size);
+	}
+
+	@GetMapping("/{purchaseId}")
+	@Operation(summary = "Get one of my purchases",
+			description = "Returns a purchase only when it belongs to the authenticated buyer.")
+	public PurchaseResponse findPurchase(@AuthenticationPrincipal Jwt jwt,
+			@PathVariable @Positive long purchaseId) {
+		return purchaseService.findPurchase(userId(jwt), purchaseId);
 	}
 
 	private static long userId(Jwt jwt) {

@@ -73,6 +73,8 @@ class GameStoreApiApplicationTests {
 		assertTrue(response.body().contains("/api/v1/auth/login"));
 		assertFalse(response.body().contains("\"/api/auth/login\""));
 		assertTrue(response.body().contains("/api/v1/purchases"));
+		assertTrue(response.body().contains("/api/v1/purchases/{purchaseId}"));
+		assertFalse(response.body().contains("/api/buyer/purchases"));
 		assertTrue(response.body().contains("/api/v1/manager/statistics/purchases"));
 	}
 }
