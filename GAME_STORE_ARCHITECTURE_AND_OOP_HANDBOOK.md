@@ -1,8 +1,36 @@
-# Game Store: Simple OOP and Architecture Guide
+# Game Store: Interview Study Guide
 
 > Reviewed project: `C:\Users\Vlad\Documents\GitHub\API-store-management-tool`  
 > Scope: all 113 project files, excluding generated `target/**` and internal `.git/**` files.  
 > Local secret values are not shown.
+
+## Quick interview answers
+
+Learn these answers first. The rest of the guide explains the evidence.
+
+**What architecture does the project use?**  
+It is one Spring Boot application with feature packages such as `auth`, `game`, and `purchase`. Inside each feature, controllers call services, and services call repositories.
+
+**Is it a microservices system?**  
+No. It is one deployable service with one database. The feature packages are code boundaries, not separate services.
+
+**Where is OOP used?**  
+`Game`, `Purchase`, and `UserAccount` keep their fields private and change them through safe methods. Interfaces are used for repositories, database result views, and Spring Security hooks. Constructors receive dependencies instead of creating them.
+
+**Why are DTO records used?**  
+DTO means Data Transfer Object. DTOs define the JSON input/output and stop JPA entities or password hashes from leaking through the API.
+
+**How does checkout prevent overselling?**  
+It starts one database transaction, locks requested game rows, checks all stock, reduces stock, saves the purchase, and commits. If any step fails, all changes are undone.
+
+**How does security work?**  
+Login returns a signed JWT. Later requests send it as a bearer token. Spring checks the signature, expiry, issuer, audience, and role before a controller runs.
+
+**How is the database schema managed?**  
+Flyway runs versioned SQL files. Hibernate only checks that Java entities match the schema.
+
+**How is the code tested?**  
+Unit tests check individual classes, slice tests check one layer, full application tests use H2, and one smoke test uses real MySQL.
 
 ## 1. What this project is
 
@@ -16,7 +44,7 @@ It is **not a system of multiple microservices**. Authentication, games, purchas
 
 Why use one service here?
 
-- Checkout can update stock and create a purchase atomically.
+- Checkout can update stock and create a purchase in one all-or-nothing database transaction.
 - Deployment and testing are simple.
 - Database foreign keys protect all related data.
 
@@ -35,7 +63,7 @@ flowchart LR
     Repositories --> JPA["JPA / Hibernate"]
     JPA --> DB[("MySQL")]
     Flyway["Flyway migrations"] --> DB
-    Controllers -. errors .-> Problems["RFC 7807 errors"]
+    Controllers -. errors .-> Problems["Standard API errors"]
     Security -. errors .-> Problems
 ```
 
@@ -46,23 +74,23 @@ flowchart LR
 | `auth` | Registration, login, and JWT issuing | Controller validates input; service hashes/checks passwords and issues tokens |
 | `user` | Account identity and roles | JPA entity plus repository |
 | `game` | Catalog, game management, and inventory | Controllers call services; specifications and repository queries read games |
-| `purchase` | Checkout, history, and reporting | Transactional service locks stock and creates purchase aggregates |
+| `purchase` | Checkout, history, and reporting | Service locks stock and creates the order inside one transaction |
 | `config` | Security and external settings | Spring beans and validated configuration records |
-| `bootstrap` | Initial manager account | Startup runner calls an idempotent transactional service |
+| `bootstrap` | Initial manager account | Startup code calls a service that is safe to run more than once |
 | `error` | Consistent API failures and request tracing | Filter, security handlers, and global exception advice |
-| `common` | Shared domain-error categories | Sealed exception hierarchy |
+| `common` | Shared domain-error categories | Small, controlled family of exception types |
 
 ### Request path
 
 1. `CorrelationIdFilter` accepts a safe `X-Correlation-ID` or generates a UUID.
 2. Spring Security verifies a bearer JWT and role.
 3. A controller validates HTTP input and calls a service.
-4. The service opens a read-only or write transaction.
-5. Entities enforce their own rules; repositories read/write through JPA.
+4. The service opens a transaction. A transaction makes related database changes succeed or fail together.
+5. Entities enforce their rules; repositories use JPA to read and write database rows as Java objects.
 6. A response record is returned. JPA entities are never returned directly.
 7. Failures become a consistent `application/problem+json` response.
 
-This separation matters because HTTP, business, and persistence rules change for different reasons.
+This gives each layer one clear job and makes the code easier to test.
 
 ## 3. Data model
 
@@ -83,44 +111,60 @@ Flyway owns schema changes. Hibernate uses `ddl-auto=validate`, so it checks map
 
 | Principle | Where | Why and how |
 |---|---|---|
-| Encapsulation | `Game`, `Purchase`, `PurchaseItem`, `UserAccount` | Fields are private and changed through methods that reject invalid price, stock, status, role, or text |
-| Abstraction | Services and repositories | Controllers ask for business operations; they do not know JPQL, locking, or password/JWT details |
-| Inheritance | `StoreDomainException` and framework base types | Feature exceptions inherit a controlled error category; the correlation filter extends Spring's once-per-request filter |
-| Polymorphism | Repository/projection/security interfaces | Spring supplies runtime implementations and calls them through interfaces |
-| Composition | Controllers, services, purchase items | Objects contain injected collaborators; a purchase owns items instead of using deep inheritance |
-| Immutability | Request/response/property records | Boundary data cannot be reassigned; purchase request lists are defensively copied |
-| Dependency injection | Constructors and `@Bean` methods | Dependencies are visible, replaceable in tests, and created by Spring |
+| Encapsulation | `Game`, `Purchase`, `PurchaseItem`, `UserAccount` | Fields stay private. Public methods change them only when the new state is valid. |
+| Abstraction | Services and repositories | A controller asks for an action such as “buy games” without knowing the SQL or lock details. |
+| Inheritance | Exceptions and the request filter | A specific error extends a general error type. The filter extends a Spring base class. |
+| Polymorphism | Repository, result-view, and security interfaces | Code calls an interface, while Spring provides the real object at runtime. |
+| Composition | Controllers, services, and purchase items | Classes are built from smaller objects. For example, a service contains repository references. |
+| Immutability | Request, response, and property records | Record values cannot be reassigned after creation. |
+| Dependency injection | Constructors and `@Bean` methods | Spring passes required objects into constructors. Tests can pass mocks instead. |
 
 ### Important examples
 
 - [`Game.java`](<C:/Users/Vlad/Documents/GitHub/API-store-management-tool/game-store-api/src/main/java/com/gamestore/game_store_api/game/Game.java:104>) owns price, stock, and activation rules. A caller cannot set fields directly.
-- [`Purchase.java`](<C:/Users/Vlad/Documents/GitHub/API-store-management-tool/game-store-api/src/main/java/com/gamestore/game_store_api/purchase/Purchase.java:86>) is an aggregate root. It owns items, total calculation, and `PENDING` state checks.
-- [`StoreDomainException.java`](<C:/Users/Vlad/Documents/GitHub/API-store-management-tool/game-store-api/src/main/java/com/gamestore/game_store_api/common/StoreDomainException.java:6>) uses a sealed hierarchy so errors have known categories.
+- [`Purchase.java`](<C:/Users/Vlad/Documents/GitHub/API-store-management-tool/game-store-api/src/main/java/com/gamestore/game_store_api/purchase/Purchase.java:86>) is the main object for an order. It owns its items, calculates the total, and controls status changes.
+- [`StoreDomainException.java`](<C:/Users/Vlad/Documents/GitHub/API-store-management-tool/game-store-api/src/main/java/com/gamestore/game_store_api/common/StoreDomainException.java:6>) limits errors to known categories such as not found or conflict.
 - [`GameRepository.java`](<C:/Users/Vlad/Documents/GitHub/API-store-management-tool/game-store-api/src/main/java/com/gamestore/game_store_api/game/GameRepository.java:15>) is an interface; Spring generates its implementation.
-- Response records hide persistence details and sensitive entity fields from API clients.
+- Response records hide database details and sensitive entity fields from API clients.
 
 ### SOLID, briefly
 
-- **Single Responsibility:** controllers handle HTTP, services coordinate use cases, entities protect local rules, repositories handle persistence.
-- **Open/Closed:** game filters compose through specifications. New filters can be added without writing every query combination.
-- **Liskov Substitution:** Spring repository/security implementations can be used through their declared interfaces.
-- **Interface Segregation:** query projections contain only fields needed by a particular report.
-- **Dependency Inversion:** services depend on repository and security interfaces. This is partial because controllers use concrete service classes, which is reasonable for this small application.
+- **Single Responsibility:** each class should have one main job. Controllers handle HTTP, services handle actions, and repositories handle database access.
+- **Open/Closed:** code should allow new behavior without rewriting everything. Game search builds small filters that can be combined.
+- **Liskov Substitution:** an object that implements an interface should work wherever that interface is expected. Spring-generated repositories do this.
+- **Interface Segregation:** prefer small interfaces. The report result interfaces expose only the values that one query needs.
+- **Dependency Inversion:** business code should depend on useful contracts, not create database/security tools itself. Services receive repository and encoder interfaces through constructors.
 
-Do not overstate SOLID: there are no multiple business strategies or deep domain hierarchies. Most polymorphism comes from Spring interfaces.
+The project uses these ideas in a practical way. It does not create an interface for every class because that would add noise.
 
 ## 5. Main design patterns
 
 | Pattern | Why | How |
 |---|---|---|
-| Controller-Service-Repository | Separate protocol, use-case, and database code | HTTP controllers call transactional services, which call repositories |
+| Controller-Service-Repository | Give each layer one job | HTTP controllers call services, and services call repositories |
 | DTO | Protect API contracts | Records map requests/responses instead of exposing entities |
-| Aggregate | Keep purchase and items consistent | `Purchase` alone adds items and completes the order |
-| Specification | Avoid many search methods | Optional game filters are composed dynamically |
-| Projection | Query summaries efficiently | Spring maps JPQL aliases to small `*View` interfaces |
+| Aggregate | Keep an order and its items consistent | `Purchase` is the main order object and controls its items |
+| Specification | Avoid a separate method for every search combination | Small game filters are combined when needed |
+| Projection | Read only the fields a report needs | Spring maps query totals to small `*View` interfaces |
 | Soft delete | Preserve history | Games are made inactive rather than removed |
 | Exception translation | Keep HTTP outside domain logic | Services throw feature exceptions; advice maps them to problem responses |
 | Dependency injection | Make wiring and tests simple | Constructor arguments supply repositories, encoders, clock, and properties |
+
+### Small glossary
+
+| Term | Simple meaning |
+|---|---|
+| Entity | A Java object stored as a database row |
+| DTO | A request or response object used to move data through the API |
+| Repository | An interface used to save and query entities |
+| Service | A class that carries out one or more business actions |
+| Transaction | A group of database changes that all succeed or all fail |
+| JPA/Hibernate | Tools that map Java objects to relational database tables |
+| JWT | A signed token that carries the user's identity and role |
+| Lock | A database rule that temporarily stops two requests from changing the same row at once |
+| Migration | A versioned SQL file that changes the database schema |
+| Projection | A small interface containing only the result fields needed by one query |
+| Aggregate root | The main object that controls related child objects; here, `Purchase` controls `PurchaseItem` |
 
 ## 6. Security and authentication
 
@@ -140,7 +184,7 @@ Do not overstate SOLID: there are no multiple business strategies or deep domain
 4. `JwtTokenService` issues a one-hour HS256 token with subject, user ID, role, issuer, audience, and expiry.
 5. Later requests validate signature, issuer, audience, expiry, and role.
 
-The API is stateless: no server session, form login, HTTP Basic, or logout endpoint. V1 also has no refresh token or revocation. A token can remain usable until expiry after a role/status change, although purchase operations re-check the buyer in the database.
+The API is stateless, which means the server does not keep a login session. Each request must send its JWT. V1 has no refresh token or early token cancellation. A token can remain usable until it expires after a role/status change, although purchase operations check the buyer in the database again.
 
 ## 7. Game and inventory logic
 
@@ -155,8 +199,8 @@ Important inconsistency: single-game lookup requires an active game, but general
 - Create checks SKU before insert and catches the database race.
 - Price changes go through `Game.changePrice`.
 - Stock accepts absolute quantity and a temporary legacy `delta`.
-- Deactivation is idempotent and keeps history.
-- `@Version` detects optimistic update conflicts.
+- Deactivation is safe to repeat: calling it twice has the same final result as calling it once.
+- `@Version` detects when two requests try to update an old copy of the same game.
 
 ### Inventory
 
@@ -191,17 +235,17 @@ sequenceDiagram
 
 Why sorted locks? Two multi-game checkouts acquire rows in the same order, reducing deadlock risk.
 
-Why pessimistic locks? Two buyers cannot both purchase the last unit.
+Why lock rows before checkout? While one checkout holds the lock, another checkout must wait. Two buyers cannot both purchase the last unit.
 
 Why validate all games before mutation? A bad second line cannot leave the first game's stock changed.
 
 History is scoped by buyer ID. Detailed lookup queries by both purchase ID and buyer ID, so another buyer receives 404 instead of learning that the purchase exists.
 
-Statistics aggregate completed purchases and historical line totals in the database. Inclusive end dates are converted to the next midnight exclusive, avoiding time-precision errors. The response mixes date-filtered sales with current low-stock count; clients should know those values use different time meanings.
+Statistics let the database calculate totals from completed purchases. For an inclusive end date, the code queries everything before the next day starts. The sales totals use the selected dates, but low-stock count means stock right now.
 
 ## 9. Errors, configuration, and operations
 
-`CorrelationIdFilter` validates/generates a request ID, adds it to logs and responses, and records status/latency. Security failures happen before controllers, so dedicated 401/403 handlers use the same problem factory as `GlobalApiExceptionHandler`.
+`CorrelationIdFilter` validates or creates a request ID, adds it to logs and responses, and records status and duration. Security failures happen before controllers, so separate 401/403 handlers build the same error format as `GlobalApiExceptionHandler`.
 
 Errors contain a stable code, status, detail, path, timestamp, and correlation ID. Validation adds field errors. Unexpected exceptions are logged but return a generic 500 message.
 
@@ -235,14 +279,14 @@ Each row states why the file exists and how it contributes.
 | [`game-store-api/src/main/java/com/gamestore/game_store_api/auth/UserResponse.java`](<C:/Users/Vlad/Documents/GitHub/API-store-management-tool/game-store-api/src/main/java/com/gamestore/game_store_api/auth/UserResponse.java:1>) | Maps an account to safe public fields and excludes the hash. |
 | [`game-store-api/src/main/java/com/gamestore/game_store_api/user/Role.java`](<C:/Users/Vlad/Documents/GitHub/API-store-management-tool/game-store-api/src/main/java/com/gamestore/game_store_api/user/Role.java:1>) | Type-safe `BUYER`/`MANAGER` role set. |
 | [`game-store-api/src/main/java/com/gamestore/game_store_api/user/UserAccount.java`](<C:/Users/Vlad/Documents/GitHub/API-store-management-tool/game-store-api/src/main/java/com/gamestore/game_store_api/user/UserAccount.java:26>) | Account entity; normalizes email and controls hash/enabled state. |
-| [`game-store-api/src/main/java/com/gamestore/game_store_api/user/UserAccountRepository.java`](<C:/Users/Vlad/Documents/GitHub/API-store-management-tool/game-store-api/src/main/java/com/gamestore/game_store_api/user/UserAccountRepository.java:1>) | Spring-generated account persistence and case-insensitive lookup. |
+| [`game-store-api/src/main/java/com/gamestore/game_store_api/user/UserAccountRepository.java`](<C:/Users/Vlad/Documents/GitHub/API-store-management-tool/game-store-api/src/main/java/com/gamestore/game_store_api/user/UserAccountRepository.java:1>) | Spring-generated code for saving accounts and finding email without case differences. |
 | [`game-store-api/src/main/java/com/gamestore/game_store_api/common/StoreDomainException.java`](<C:/Users/Vlad/Documents/GitHub/API-store-management-tool/game-store-api/src/main/java/com/gamestore/game_store_api/common/StoreDomainException.java:6>) | Sealed bad-request/not-found/conflict/forbidden error family. |
 | [`game-store-api/src/main/java/com/gamestore/game_store_api/bootstrap/ManagerBootstrapRunner.java`](<C:/Users/Vlad/Documents/GitHub/API-store-management-tool/game-store-api/src/main/java/com/gamestore/game_store_api/bootstrap/ManagerBootstrapRunner.java:1>) | Framework callback that starts manager provisioning. |
-| [`game-store-api/src/main/java/com/gamestore/game_store_api/bootstrap/ManagerBootstrapService.java`](<C:/Users/Vlad/Documents/GitHub/API-store-management-tool/game-store-api/src/main/java/com/gamestore/game_store_api/bootstrap/ManagerBootstrapService.java:1>) | Creates one manager idempotently and refuses buyer promotion. |
+| [`game-store-api/src/main/java/com/gamestore/game_store_api/bootstrap/ManagerBootstrapService.java`](<C:/Users/Vlad/Documents/GitHub/API-store-management-tool/game-store-api/src/main/java/com/gamestore/game_store_api/bootstrap/ManagerBootstrapService.java:1>) | Creates the first manager, is safe to run again, and never turns a buyer into a manager. |
 | [`game-store-api/src/main/java/com/gamestore/game_store_api/config/JwtProperties.java`](<C:/Users/Vlad/Documents/GitHub/API-store-management-tool/game-store-api/src/main/java/com/gamestore/game_store_api/config/JwtProperties.java:1>) | Immutable, fail-fast JWT configuration. |
 | [`game-store-api/src/main/java/com/gamestore/game_store_api/config/ManagerBootstrapProperties.java`](<C:/Users/Vlad/Documents/GitHub/API-store-management-tool/game-store-api/src/main/java/com/gamestore/game_store_api/config/ManagerBootstrapProperties.java:1>) | Immutable external manager credentials configuration. |
 | [`game-store-api/src/main/java/com/gamestore/game_store_api/config/OpenApiConfiguration.java`](<C:/Users/Vlad/Documents/GitHub/API-store-management-tool/game-store-api/src/main/java/com/gamestore/game_store_api/config/OpenApiConfiguration.java:1>) | API title/tags and shared bearer-scheme definition. |
-| [`game-store-api/src/main/java/com/gamestore/game_store_api/config/SecurityConfiguration.java`](<C:/Users/Vlad/Documents/GitHub/API-store-management-tool/game-store-api/src/main/java/com/gamestore/game_store_api/config/SecurityConfiguration.java:38>) | Builds stateless authorization, BCrypt, JWT validation, role mapping, and UTC clock. |
+| [`game-store-api/src/main/java/com/gamestore/game_store_api/config/SecurityConfiguration.java`](<C:/Users/Vlad/Documents/GitHub/API-store-management-tool/game-store-api/src/main/java/com/gamestore/game_store_api/config/SecurityConfiguration.java:38>) | Sets public/protected routes, password hashing, JWT checks, roles, and UTC time. |
 
 ### Error handling
 
@@ -279,7 +323,7 @@ Each row states why the file exists and how it contributes.
 | [`game-store-api/src/main/java/com/gamestore/game_store_api/game/InventoryPage.java`](<C:/Users/Vlad/Documents/GitHub/API-store-management-tool/game-store-api/src/main/java/com/gamestore/game_store_api/game/InventoryPage.java:1>) | Inventory-specific paged response. |
 | [`game-store-api/src/main/java/com/gamestore/game_store_api/game/InventoryService.java`](<C:/Users/Vlad/Documents/GitHub/API-store-management-tool/game-store-api/src/main/java/com/gamestore/game_store_api/game/InventoryService.java:1>) | Read-only inventory search and summary coordination. |
 | [`game-store-api/src/main/java/com/gamestore/game_store_api/game/InventorySummaryResponse.java`](<C:/Users/Vlad/Documents/GitHub/API-store-management-tool/game-store-api/src/main/java/com/gamestore/game_store_api/game/InventorySummaryResponse.java:1>) | Public counts, threshold, units, and value. |
-| [`game-store-api/src/main/java/com/gamestore/game_store_api/game/InventorySummaryView.java`](<C:/Users/Vlad/Documents/GitHub/API-store-management-tool/game-store-api/src/main/java/com/gamestore/game_store_api/game/InventorySummaryView.java:1>) | Small interface implemented by Spring's aggregate-query projection. |
+| [`game-store-api/src/main/java/com/gamestore/game_store_api/game/InventorySummaryView.java`](<C:/Users/Vlad/Documents/GitHub/API-store-management-tool/game-store-api/src/main/java/com/gamestore/game_store_api/game/InventorySummaryView.java:1>) | Small interface holding totals returned by the inventory query. |
 | [`game-store-api/src/main/java/com/gamestore/game_store_api/game/ManagerGameController.java`](<C:/Users/Vlad/Documents/GitHub/API-store-management-tool/game-store-api/src/main/java/com/gamestore/game_store_api/game/ManagerGameController.java:1>) | Manager create/price/stock/deactivate HTTP adapter. |
 | [`game-store-api/src/main/java/com/gamestore/game_store_api/game/ManagerInventoryController.java`](<C:/Users/Vlad/Documents/GitHub/API-store-management-tool/game-store-api/src/main/java/com/gamestore/game_store_api/game/ManagerInventoryController.java:1>) | Manager inventory list/summary HTTP adapter. |
 
@@ -288,28 +332,28 @@ Each row states why the file exists and how it contributes.
 | File | Why / how |
 |---|---|
 | [`game-store-api/src/main/java/com/gamestore/game_store_api/purchase/CreatePurchaseRequest.java`](<C:/Users/Vlad/Documents/GitHub/API-store-management-tool/game-store-api/src/main/java/com/gamestore/game_store_api/purchase/CreatePurchaseRequest.java:1>) | Validates and defensively copies 1–50 purchase lines. |
-| [`game-store-api/src/main/java/com/gamestore/game_store_api/purchase/InvalidPurchaseRequestException.java`](<C:/Users/Vlad/Documents/GitHub/API-store-management-tool/game-store-api/src/main/java/com/gamestore/game_store_api/purchase/InvalidPurchaseRequestException.java:1>) | Semantic request error, currently duplicate game lines. |
+| [`game-store-api/src/main/java/com/gamestore/game_store_api/purchase/InvalidPurchaseRequestException.java`](<C:/Users/Vlad/Documents/GitHub/API-store-management-tool/game-store-api/src/main/java/com/gamestore/game_store_api/purchase/InvalidPurchaseRequestException.java:1>) | Business validation error, currently used when a game appears twice. |
 | [`game-store-api/src/main/java/com/gamestore/game_store_api/purchase/InvalidStatisticsRangeException.java`](<C:/Users/Vlad/Documents/GitHub/API-store-management-tool/game-store-api/src/main/java/com/gamestore/game_store_api/purchase/InvalidStatisticsRangeException.java:1>) | Invalid or unrepresentable date range. |
 | [`game-store-api/src/main/java/com/gamestore/game_store_api/purchase/ManagerPurchaseStatisticsController.java`](<C:/Users/Vlad/Documents/GitHub/API-store-management-tool/game-store-api/src/main/java/com/gamestore/game_store_api/purchase/ManagerPurchaseStatisticsController.java:1>) | Manager statistics HTTP adapter and parameter validation. |
-| [`game-store-api/src/main/java/com/gamestore/game_store_api/purchase/Purchase.java`](<C:/Users/Vlad/Documents/GitHub/API-store-management-tool/game-store-api/src/main/java/com/gamestore/game_store_api/purchase/Purchase.java:36>) | Aggregate root controlling buyer, items, total, currency, and status transitions. |
+| [`game-store-api/src/main/java/com/gamestore/game_store_api/purchase/Purchase.java`](<C:/Users/Vlad/Documents/GitHub/API-store-management-tool/game-store-api/src/main/java/com/gamestore/game_store_api/purchase/Purchase.java:36>) | Main order entity; controls buyer, items, total, currency, and status changes. |
 | [`game-store-api/src/main/java/com/gamestore/game_store_api/purchase/PurchaseAccessException.java`](<C:/Users/Vlad/Documents/GitHub/API-store-management-tool/game-store-api/src/main/java/com/gamestore/game_store_api/purchase/PurchaseAccessException.java:1>) | Missing/disabled/non-buyer purchase access failure. |
 | [`game-store-api/src/main/java/com/gamestore/game_store_api/purchase/PurchaseConflictException.java`](<C:/Users/Vlad/Documents/GitHub/API-store-management-tool/game-store-api/src/main/java/com/gamestore/game_store_api/purchase/PurchaseConflictException.java:1>) | Inactive game or insufficient-stock checkout conflict. |
 | [`game-store-api/src/main/java/com/gamestore/game_store_api/purchase/PurchaseGameNotFoundException.java`](<C:/Users/Vlad/Documents/GitHub/API-store-management-tool/game-store-api/src/main/java/com/gamestore/game_store_api/purchase/PurchaseGameNotFoundException.java:1>) | Missing game during checkout locking. |
 | [`game-store-api/src/main/java/com/gamestore/game_store_api/purchase/PurchaseHistoryPage.java`](<C:/Users/Vlad/Documents/GitHub/API-store-management-tool/game-store-api/src/main/java/com/gamestore/game_store_api/purchase/PurchaseHistoryPage.java:1>) | Paged buyer history of compact summaries. |
-| [`game-store-api/src/main/java/com/gamestore/game_store_api/purchase/PurchaseItem.java`](<C:/Users/Vlad/Documents/GitHub/API-store-management-tool/game-store-api/src/main/java/com/gamestore/game_store_api/purchase/PurchaseItem.java:28>) | Aggregate child that snapshots title, price, quantity, and line total. |
+| [`game-store-api/src/main/java/com/gamestore/game_store_api/purchase/PurchaseItem.java`](<C:/Users/Vlad/Documents/GitHub/API-store-management-tool/game-store-api/src/main/java/com/gamestore/game_store_api/purchase/PurchaseItem.java:28>) | Order item that saves the title, price, quantity, and line total at checkout time. |
 | [`game-store-api/src/main/java/com/gamestore/game_store_api/purchase/PurchaseItemRequest.java`](<C:/Users/Vlad/Documents/GitHub/API-store-management-tool/game-store-api/src/main/java/com/gamestore/game_store_api/purchase/PurchaseItemRequest.java:1>) | Validated game ID and quantity. |
 | [`game-store-api/src/main/java/com/gamestore/game_store_api/purchase/PurchaseItemResponse.java`](<C:/Users/Vlad/Documents/GitHub/API-store-management-tool/game-store-api/src/main/java/com/gamestore/game_store_api/purchase/PurchaseItemResponse.java:1>) | Public receipt line using historical snapshot fields. |
 | [`game-store-api/src/main/java/com/gamestore/game_store_api/purchase/PurchaseNotFoundException.java`](<C:/Users/Vlad/Documents/GitHub/API-store-management-tool/game-store-api/src/main/java/com/gamestore/game_store_api/purchase/PurchaseNotFoundException.java:1>) | Missing or unowned purchase returns the same 404. |
 | [`game-store-api/src/main/java/com/gamestore/game_store_api/purchase/PurchaseRepository.java`](<C:/Users/Vlad/Documents/GitHub/API-store-management-tool/game-store-api/src/main/java/com/gamestore/game_store_api/purchase/PurchaseRepository.java:13>) | Buyer-scoped fetches and database sales aggregations. |
 | [`game-store-api/src/main/java/com/gamestore/game_store_api/purchase/PurchaseResponse.java`](<C:/Users/Vlad/Documents/GitHub/API-store-management-tool/game-store-api/src/main/java/com/gamestore/game_store_api/purchase/PurchaseResponse.java:1>) | Detailed purchase/receipt response. |
-| [`game-store-api/src/main/java/com/gamestore/game_store_api/purchase/PurchaseService.java`](<C:/Users/Vlad/Documents/GitHub/API-store-management-tool/game-store-api/src/main/java/com/gamestore/game_store_api/purchase/PurchaseService.java:20>) | Atomic checkout, sorted locks, stock deduction, persistence, and owned history. |
+| [`game-store-api/src/main/java/com/gamestore/game_store_api/purchase/PurchaseService.java`](<C:/Users/Vlad/Documents/GitHub/API-store-management-tool/game-store-api/src/main/java/com/gamestore/game_store_api/purchase/PurchaseService.java:20>) | Runs all-or-nothing checkout, locks stock, saves orders, and returns only the buyer's history. |
 | [`game-store-api/src/main/java/com/gamestore/game_store_api/purchase/PurchaseStatisticsResponse.java`](<C:/Users/Vlad/Documents/GitHub/API-store-management-tool/game-store-api/src/main/java/com/gamestore/game_store_api/purchase/PurchaseStatisticsResponse.java:1>) | Combined manager sales and current-stock report. |
-| [`game-store-api/src/main/java/com/gamestore/game_store_api/purchase/PurchaseStatisticsService.java`](<C:/Users/Vlad/Documents/GitHub/API-store-management-tool/game-store-api/src/main/java/com/gamestore/game_store_api/purchase/PurchaseStatisticsService.java:17>) | Date handling, aggregate queries, average, and top-game mapping. |
-| [`game-store-api/src/main/java/com/gamestore/game_store_api/purchase/PurchaseStatisticsView.java`](<C:/Users/Vlad/Documents/GitHub/API-store-management-tool/game-store-api/src/main/java/com/gamestore/game_store_api/purchase/PurchaseStatisticsView.java:1>) | Spring projection for order/revenue/buyer summary. |
+| [`game-store-api/src/main/java/com/gamestore/game_store_api/purchase/PurchaseStatisticsService.java`](<C:/Users/Vlad/Documents/GitHub/API-store-management-tool/game-store-api/src/main/java/com/gamestore/game_store_api/purchase/PurchaseStatisticsService.java:17>) | Handles dates and combines database totals, average order value, and top games. |
+| [`game-store-api/src/main/java/com/gamestore/game_store_api/purchase/PurchaseStatisticsView.java`](<C:/Users/Vlad/Documents/GitHub/API-store-management-tool/game-store-api/src/main/java/com/gamestore/game_store_api/purchase/PurchaseStatisticsView.java:1>) | Small interface holding order, revenue, and buyer totals from a query. |
 | [`game-store-api/src/main/java/com/gamestore/game_store_api/purchase/PurchaseStatus.java`](<C:/Users/Vlad/Documents/GitHub/API-store-management-tool/game-store-api/src/main/java/com/gamestore/game_store_api/purchase/PurchaseStatus.java:1>) | Closed pending/completed/cancelled state set. |
 | [`game-store-api/src/main/java/com/gamestore/game_store_api/purchase/PurchaseSummaryResponse.java`](<C:/Users/Vlad/Documents/GitHub/API-store-management-tool/game-store-api/src/main/java/com/gamestore/game_store_api/purchase/PurchaseSummaryResponse.java:1>) | Lightweight history row. |
 | [`game-store-api/src/main/java/com/gamestore/game_store_api/purchase/TopGameSalesResponse.java`](<C:/Users/Vlad/Documents/GitHub/API-store-management-tool/game-store-api/src/main/java/com/gamestore/game_store_api/purchase/TopGameSalesResponse.java:1>) | Public ranked-game sales row. |
-| [`game-store-api/src/main/java/com/gamestore/game_store_api/purchase/TopGameSalesView.java`](<C:/Users/Vlad/Documents/GitHub/API-store-management-tool/game-store-api/src/main/java/com/gamestore/game_store_api/purchase/TopGameSalesView.java:1>) | Spring projection for top-game query aliases. |
+| [`game-store-api/src/main/java/com/gamestore/game_store_api/purchase/TopGameSalesView.java`](<C:/Users/Vlad/Documents/GitHub/API-store-management-tool/game-store-api/src/main/java/com/gamestore/game_store_api/purchase/TopGameSalesView.java:1>) | Small interface holding the values returned by the top-games query. |
 | [`game-store-api/src/main/java/com/gamestore/game_store_api/purchase/V1PurchaseController.java`](<C:/Users/Vlad/Documents/GitHub/API-store-management-tool/game-store-api/src/main/java/com/gamestore/game_store_api/purchase/V1PurchaseController.java:1>) | Buyer checkout/history/detail HTTP adapter; reads user ID from JWT. |
 
 ## 11. Tests
@@ -321,14 +365,14 @@ Each row states why the file exists and how it contributes.
 | [`game-store-api/src/test/java/com/gamestore/game_store_api/game/GameServiceTests.java`](<C:/Users/Vlad/Documents/GitHub/API-store-management-tool/game-store-api/src/test/java/com/gamestore/game_store_api/game/GameServiceTests.java:1>) | Fast Mockito tests for game service and entity rules. |
 | [`game-store-api/src/test/java/com/gamestore/game_store_api/GameManagementIntegrationTests.java`](<C:/Users/Vlad/Documents/GitHub/API-store-management-tool/game-store-api/src/test/java/com/gamestore/game_store_api/GameManagementIntegrationTests.java:1>) | Full manager lifecycle, catalog, roles, validation, and conflicts. |
 | [`game-store-api/src/test/java/com/gamestore/game_store_api/GameStoreApiApplicationTests.java`](<C:/Users/Vlad/Documents/GitHub/API-store-management-tool/game-store-api/src/test/java/com/gamestore/game_store_api/GameStoreApiApplicationTests.java:1>) | Context, Flyway, health, OpenAPI, and production OpenAPI disablement. |
-| [`game-store-api/src/test/java/com/gamestore/game_store_api/ManagerReportingIntegrationTests.java`](<C:/Users/Vlad/Documents/GitHub/API-store-management-tool/game-store-api/src/test/java/com/gamestore/game_store_api/ManagerReportingIntegrationTests.java:1>) | Inventory and sales projections, totals, dates, ranking, and authorization. |
+| [`game-store-api/src/test/java/com/gamestore/game_store_api/ManagerReportingIntegrationTests.java`](<C:/Users/Vlad/Documents/GitHub/API-store-management-tool/game-store-api/src/test/java/com/gamestore/game_store_api/ManagerReportingIntegrationTests.java:1>) | Inventory and sales query results, totals, dates, ranking, and manager access. |
 | [`game-store-api/src/test/java/com/gamestore/game_store_api/MySqlSmokeIT.java`](<C:/Users/Vlad/Documents/GitHub/API-store-management-tool/game-store-api/src/test/java/com/gamestore/game_store_api/MySqlSmokeIT.java:1>) | Critical public journey against real MySQL rather than H2. |
-| [`game-store-api/src/test/java/com/gamestore/game_store_api/PersistenceIntegrationTests.java`](<C:/Users/Vlad/Documents/GitHub/API-store-management-tool/game-store-api/src/test/java/com/gamestore/game_store_api/PersistenceIntegrationTests.java:1>) | Mappings, cascade, price snapshot, normalization, and database constraints. |
+| [`game-store-api/src/test/java/com/gamestore/game_store_api/PersistenceIntegrationTests.java`](<C:/Users/Vlad/Documents/GitHub/API-store-management-tool/game-store-api/src/test/java/com/gamestore/game_store_api/PersistenceIntegrationTests.java:1>) | Entity/table mapping, saving order items with an order, price history, and database rules. |
 | [`game-store-api/src/test/java/com/gamestore/game_store_api/PurchaseIntegrationTests.java`](<C:/Users/Vlad/Documents/GitHub/API-store-management-tool/game-store-api/src/test/java/com/gamestore/game_store_api/PurchaseIntegrationTests.java:1>) | Success, rollback, ownership, service branches, and no-oversell concurrency. |
-| [`game-store-api/src/test/java/com/gamestore/game_store_api/repository/GameRepositoryTests.java`](<C:/Users/Vlad/Documents/GitHub/API-store-management-tool/game-store-api/src/test/java/com/gamestore/game_store_api/repository/GameRepositoryTests.java:1>) | JPA queries, projections, constraints, and specifications in isolation. |
+| [`game-store-api/src/test/java/com/gamestore/game_store_api/repository/GameRepositoryTests.java`](<C:/Users/Vlad/Documents/GitHub/API-store-management-tool/game-store-api/src/test/java/com/gamestore/game_store_api/repository/GameRepositoryTests.java:1>) | Database queries, result views, constraints, and game filters without the web layer. |
 | [`game-store-api/src/test/java/com/gamestore/game_store_api/web/ManagerGameControllerSecurityTests.java`](<C:/Users/Vlad/Documents/GitHub/API-store-management-tool/game-store-api/src/test/java/com/gamestore/game_store_api/web/ManagerGameControllerSecurityTests.java:1>) | MVC mapping, JWT roles, validation, errors, and no service call after rejection. |
 
-The test levels complement each other: unit tests explain local logic, slices test one layer, full H2 tests verify wiring, and MySQL smoke catches dialect differences.
+The test levels support each other: unit tests check one class, slice tests check one layer, full H2 tests check the complete wiring, and MySQL smoke catches database behavior differences.
 
 ## 12. Configuration, database, build, and documentation
 
@@ -373,7 +417,7 @@ These files are present but ignored/untracked. They are not the committed applic
 ## 14. Most important improvements
 
 1. **Remove credentials from `.run` XML files.** Use `.env` or IDE secret injection. Rotate values if they were shared.
-2. **Fix catalog activity semantics.** Either force buyer catalog search to active games or document/authorize inactive visibility.
+2. **Fix the catalog's active-game rule.** Either force buyer searches to active games or clearly allow and document inactive games.
 3. **Make manager bootstrap safe across simultaneous replicas.** Handle the unique-insert race or provision managers outside startup.
 4. **Retire legacy routes and stock `delta`.** This removes duplicate API surface and the unused `InvalidStockAdjustmentException`.
 5. **Do not expose `Purchase.cancel()` yet.** Cancellation currently does not restore stock or coordinate refunds.
